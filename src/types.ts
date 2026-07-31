@@ -52,6 +52,7 @@ export interface Product {
   monthlyCapacity: string;
   priceRange: string;
   imageUrl: string;
+  images?: string[];
   status: 'Available' | 'Out of Stock';
   createdAt: string;
 }
@@ -77,7 +78,13 @@ export interface TrainingProgram {
   title: string;
   whoItIsFor: string;
   duration: string;
-  format: string; // 'Online' | 'In-person' | 'Hybrid'
+  format?: string; // Kept for backwards compatibility
+  description?: string;
+  location?: string;
+  price?: string;
+  contactNumber?: string;
+  certificate?: 'Yes' | 'No' | 'Optional' | string;
+  features?: string | string[];
   createdAt: string;
 }
 
@@ -85,6 +92,7 @@ export interface TrainingRequest {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   district: string;
   trainingInterest: string; // training program ID or custom name
   preferredFormat: string;
@@ -149,7 +157,7 @@ export interface MachineryInquiry {
 
 export interface MachineItem {
   id: string;
-  category?: 'powders' | 'culinary' | 'snacks';
+  category?: string;
   nameEN: string;
   nameSI: string;
   descriptionEN: string;

@@ -48,6 +48,25 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
   const [inquirySuccess, setInquirySuccess] = useState(false);
   const [inquiryError, setInquiryError] = useState('');
 
+  const allExistingCategories = Array.from(
+    new Set([
+      'Fresh Oyster Mushroom',
+      'Fresh Button Mushroom',
+      'Dried Mushroom',
+      'Mushroom Powder',
+      'Mushroom Meatballs',
+      'Mushroom Sausages',
+      'Spawn',
+      'Grow Bags',
+      'Compost',
+      ...products.map((p) => p.category).filter(Boolean)
+    ])
+  );
+  const categoriesList = ['All Categories', ...allExistingCategories];
+
+  // Image index state for detail view modal
+  const [selectedModalImageIndex, setSelectedModalImageIndex] = useState(0);
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -164,7 +183,7 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 bg-[#F5F5F0] border border-[#5A5A40]/25 rounded-xl text-[#2D2D2A] text-sm outline-none focus:ring-2 focus:ring-[#8B4513]/10 focus:border-[#8B4513] transition"
           >
-            {CATEGORIES.map((cat) => (
+            {categoriesList.map((cat) => (
               <option key={cat} value={cat}>
                 {cat === 'All Categories' && language === 'SI' ? 'සියලුම වර්ගයන්' : cat}
               </option>
@@ -518,6 +537,11 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
           ? related 
           : products.filter((p) => p.id !== expandedProduct.id).slice(0, 3);
 
+        const productImages = (expandedProduct.images && expandedProduct.images.length > 0)
+          ? expandedProduct.images
+          : [expandedProduct.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=600'];
+        const activeImage = productImages[selectedModalImageIndex] || productImages[0];
+
         return (
           <div className="fixed inset-0 bg-[#2D2D2A]/70 flex items-center justify-center p-4 z-50 overflow-y-auto animate-fade-in" id="expanded-product-modal">
             <div className="bg-white border border-[#5A5A40]/15 rounded-[32px] max-w-4xl w-full overflow-hidden shadow-2xl relative my-8 flex flex-col md:flex-row h-[90vh] md:h-[80vh]">
@@ -525,6 +549,7 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
               <button
                 onClick={() => {
                   setExpandedProduct(null);
+                  setSelectedModalImageIndex(0);
                   setInquirySuccess(false);
                   setInquiryError('');
                 }}
@@ -552,19 +577,36 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                   {/* Main Image */}
                   <div className="relative aspect-[4/3] rounded-2xl overflow-hidden shadow-sm border border-[#5A5A40]/15 bg-white shrink-0">
                     <img
-                      src={expandedProduct.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=600'}
+                      src={activeImage}
                       alt={expandedProduct.name}
                       referrerPolicy="no-referrer"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=600';
                       }}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-all duration-300"
                     />
                     <div className="absolute bottom-3 left-3 bg-white/95 text-stone-800 text-xs font-serif font-bold px-3 py-1.5 rounded-full flex items-center space-x-1 shadow-sm">
                       <MapPin className="h-3.5 w-3.5 text-[#8B4513]" />
                       <span>{expandedProduct.district} {language === 'EN' ? 'District' : 'දිස්ත්‍රික්කය'}</span>
                     </div>
                   </div>
+
+                  {/* Thumbnails list */}
+                  {productImages.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {productImages.map((img, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedModalImageIndex(idx)}
+                          className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition shrink-0 ${
+                            (selectedModalImageIndex === idx) ? 'border-[#8B4513] shadow-md scale-105' : 'border-stone-200 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Cultivation standard guidelines */}
                   <div className="bg-stone-50 border border-stone-200/60 p-4 rounded-2xl space-y-2">

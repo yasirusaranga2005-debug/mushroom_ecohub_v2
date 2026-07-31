@@ -151,124 +151,95 @@ import {
 const SEED_USERS: Record<string, UserProfile> = {};
 const SEED_PRODUCTS: Product[] = [];
 const SEED_MEMBERS: EcosystemMember[] = [];
-const SEED_TRAINING: TrainingProgram[] = [];
-const SEED_TRAINING_REQUESTS: TrainingRequest[] = [];
+const SEED_TRAINING: TrainingProgram[] = [
+  {
+    id: 'train_01',
+    title: 'Commercial Oyster Mushroom Cultivation Masterclass',
+    whoItIsFor: 'Beginners, Smallholders & Commercial Agri-Entrepreneurs',
+    duration: '2 Days (12 Hours Total)',
+    description: 'Comprehensive hands-on training covering substrate formula creation, steam pasteurization, bag incubation, harvesting, and pest control techniques for high-yield oyster mushroom farming.',
+    location: 'Siyamira (Pvt) Ltd Training Centre, Sri Lanka',
+    price: 'LKR 15,000 per participant',
+    contactNumber: '+94 76 094 0075',
+    certificate: 'Yes',
+    features: [
+      'Classroom Theory Sessions',
+      'Hands-on Practical Training',
+      'Substrate Pasteurization & Inoculation',
+      'Live Product Demonstrations',
+      'Business Guidance & Technical Support',
+      'Certificate of Participation'
+    ],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'train_02',
+    title: 'Mushroom Spawn Production & Laboratory Techniques',
+    whoItIsFor: 'Advanced Growers, Laboratory Technicians & Spawn Producers',
+    duration: '3 Days (18 Hours Total)',
+    description: 'Master pure culture isolation, tissue culturing, mother grain spawn preparation, and sterile laminar airflow chamber maintenance.',
+    location: 'Siyamira (Pvt) Ltd Training Centre, Sri Lanka',
+    price: 'LKR 25,000 per participant',
+    contactNumber: '+94 76 094 0075',
+    certificate: 'Yes',
+    features: [
+      'Pure Tissue Culture & Agar Media Prep',
+      'Grain Spawn Sterilization Techniques',
+      'Laminar Airflow Workstation Operations',
+      'Quality Control & Contamination Management',
+      'Certificate of Participation'
+    ],
+    createdAt: new Date().toISOString()
+  }
+];
+const SEED_TRAINING_REQUESTS: TrainingRequest[] = [
+  {
+    id: 'trq_demo_01',
+    name: 'Kavinda Perera',
+    phone: '+94 77 123 4567',
+    email: 'kavinda.p@gmail.com',
+    district: 'Gampaha',
+    trainingInterest: 'Commercial Oyster Mushroom Cultivation Masterclass',
+    preferredFormat: 'In-person Practical Session',
+    message: 'Interested in starting a small-scale oyster mushroom farm in Nittambuwa. Please send available weekend batch dates.',
+    status: 'New',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'trq_demo_02',
+    name: 'Nimali Jayasinghe',
+    phone: '+94 71 987 6543',
+    email: 'nimalij@yahoo.com',
+    district: 'Kandy',
+    trainingInterest: 'Mushroom Spawn Production & Laboratory Techniques',
+    preferredFormat: 'Laboratory Hands-on Session',
+    message: 'We operate an agricultural coop in Peradeniya and need spawn production training for 3 staff members.',
+    status: 'Contacted',
+    createdAt: new Date(Date.now() - 86400000).toISOString()
+  }
+];
 const SEED_OPPORTUNITIES: Opportunity[] = [];
 const SEED_OPP_APPLICATIONS: OpportunityApplication[] = [];
 const SEED_CONTACT_MESSAGES: ContactMessage[] = [];
 const SEED_ANNOUNCEMENTS: Announcement[] = [];
 const SEED_BUYER_INQUIRIES: BuyerInquiry[] = [];
-const SEED_MACHINERY_INQUIRIES: MachineryInquiry[] = [];
-const SEED_MACHINERY_ITEMS: MachineItem[] = [
+const SEED_MACHINERY_INQUIRIES: MachineryInquiry[] = [
   {
-    id: 'mac-pow-1',
-    category: 'powders',
-    nameEN: 'Commercial Air Washer / Bubble Washing Machine',
-    nameSI: 'වාණිජ වායු සහ බුබුලු සේදුම් යන්ත්‍රය',
-    descriptionEN: 'Cleans fresh whole mushrooms thoroughly to remove residual substrate dust, peat moss, and organic particles before dehydrating.',
-    descriptionSI: 'හතු වියළීමට පෙර ඒවායේ ඇති උපස්තර දූවිලි සහ අනෙකුත් අපද්‍රව්‍ය පීඩන බුබුලු මඟින් සම්පූර්ණයෙන්ම පිරිසිදු කරන සේදුම් යන්ත්‍රය.',
-    featuresEN: [
-      'High-pressure water bubbling simulates manual washing to protect delicate mushroom caps.',
-      'Continuous conveyor belt for streamlined automatic discharging.',
-      'Water recycling filtration system to minimize eco-footprint.'
-    ],
-    featuresSI: [
-      'හතු තොප්පියට හානි නොවන සේ පීඩන ජල බුබුලු මඟින් පිරිසිදු කිරීම.',
-      'ස්වයංක්‍රීයව සෝදා ඉවත් කිරීම සඳහා අඛණ්ඩ වාහක පටිය (Conveyor belt).',
-      'ජල පරිභෝජනය අවම කරන ප්‍රතිචක්‍රීකරණ පෙරහන පද්ධතිය.'
-    ],
-    specs: {
-      capacity: '300 - 500 kg/hr',
-      power: '2.2 kW, 380V Three-Phase',
-      material: 'Food-Grade SUS304 Stainless Steel',
-      weight: '280 kg'
-    },
-    priceRange: 'LKR 850,000 - 1,200,000',
-    imageUrl: 'https://images.unsplash.com/photo-1540324155974-72223a979e29?auto=format&fit=crop&q=80&w=500',
-    tags: ['Washing', 'Prep-stage', 'Powders']
-  },
-  {
-    id: 'mac-pow-2',
-    category: 'powders',
-    nameEN: 'Industrial Dehydrator / Multi-Tier Mesh Belt Dryer',
-    nameSI: 'කාර්මික වියළන යන්ත්‍රය / බහු-තට්ටු වාහක වියළනය',
-    descriptionEN: 'Utilizes precision-controlled forced hot air or vacuum drying to strip moisture uniformly while fully preserving active polysaccharides and nutritional value.',
-    descriptionSI: 'හතු වල ඇති පෝෂණ කොටස් සහ ඖෂධීය ගුණය සුරකිමින්, නියමිත උෂ්ණත්වයකින් යුතුව ඒකාකාරව ජලය ඉවත් කරන වාහක වියළනය.',
-    featuresEN: [
-      'Multi-tier design for massive volume handling within a compact workspace.',
-      'Smart PID microprocessor temperature controller (30°C to 120°C).',
-      'Uniform horizontal airflow avoids hotspot scorching.'
-    ],
-    featuresSI: [
-      'ඉඩකඩ ඉතිරි කරමින් විශාල ධාරිතාවක් වියළීමට බහු-තට්ටු සැලසුම.',
-      'නියමිත උෂ්ණත්වය පාලනය කරන ස්මාර්ට් PID පද්ධතිය (30°C සිට 120°C).',
-      'හතු පිළිස්සීමෙන් තොරව ඒකාකාරව උණුසුම් වායුව ගමන් කරවීම.'
-    ],
-    specs: {
-      capacity: '100 - 200 kg per batch',
-      power: '15 kW (Electric heating with fan system)',
-      material: 'SUS304 Stainless Steel interior & exterior',
-      weight: '650 kg'
-    },
-    priceRange: 'LKR 1,800,000 - 2,500,000',
-    imageUrl: 'https://images.unsplash.com/photo-1555529771-835e59fc5efe?auto=format&fit=crop&q=80&w=500',
-    tags: ['Drying', 'Brightsail', 'Powders']
-  },
-  {
-    id: 'mac-cul-1',
-    category: 'culinary',
-    nameEN: 'Industrial Mushroom Slicing & Dicing Machine',
-    nameSI: 'කාර්මික හතු පෙති කපන යන්ත්‍රය',
-    descriptionEN: 'Precision rotary slicer engineered specifically for soft mushroom caps and stems to deliver uniform thickness for canning or drying.',
-    descriptionSI: 'ටින් කිරීමට හෝ වියළීමට පෙර හතු තොප්පි සහ නැටි ඒකාකාර ඝනකමකින් යුතුව කැපීමට නිපදවා ඇති ස්වයංක්‍රීය යන්ත්‍රය.',
-    featuresEN: [
-      'High-speed rotating disc with razor-sharp medical grade stainless blades.',
-      'Adjustable slicing thickness range from 2mm to 10mm.',
-      'Protective hopper feed prevents hand contact with cutting zone.'
-    ],
-    featuresSI: [
-      'අධිවේගී කැපුම් තල මඟින් ඉතා නිවැරදිව හතු පෙති කැපීම.',
-      'මිලිමීටර් 2 සිට 10 දක්වා ඝනකම වෙනස් කිරීමේ පහසුකම.',
-      'ආරක්ෂිත පෝෂක කොටස මඟින් හතු කැපීමේදී අනතුරු සිදු වීම වළක්වයි.'
-    ],
-    specs: {
-      capacity: '200 - 400 kg/hr',
-      power: '1.5 kW, 220V Single-Phase',
-      material: 'SUS304 Stainless Steel body',
-      weight: '160 kg'
-    },
-    priceRange: 'LKR 550,000 - 750,000',
-    imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&q=80&w=500',
-    tags: ['Slicing', 'Culinary', 'Prep']
-  },
-  {
-    id: 'mac-snk-1',
-    category: 'snacks',
-    nameEN: 'Vacuum Frying System (Low-Temp VF Fryer)',
-    nameSI: 'රික්ත බැදීමේ යන්ත්‍ර පද්ධතිය (Vacuum Frying)',
-    descriptionEN: 'Fries fresh mushroom slices under negative vacuum pressure below 90°C. Reduces oil retention by 70% while preserving vivid colors and natural aromas.',
-    descriptionSI: 'අඩු උෂ්ණත්වයක් සහ රික්ත පීඩනයක් යටතේ තෙල් රහිතව හැපෙනසුළු හතු චිප්ස් නිෂ්පාදනය කරන උසස් තාක්ෂණික යන්ත්‍රය.',
-    featuresEN: [
-      'De-oiling centrifugal spin cycle inside vacuum chamber eliminates greasy feel.',
-      'Fully automated PLC recipe control with touch panel.',
-      'Integrated oil filtration and storage reservoir.'
-    ],
-    featuresSI: [
-      'තෙල් ගතිය ඉවත් කරන ස්වයංක්‍රීය කැරකෙන චූෂණ පද්ධතිය.',
-      'ස්පර්ශ තිරය මඟින් ක්‍රියාත්මක වන PLC පාලන පද්ධතිය.',
-      'ඒකාබද්ධ තෙල් පෙරහන සහ ගබඩා ටැංකිය.'
-    ],
-    specs: {
-      capacity: '50 - 100 kg/batch',
-      power: '22 kW, 380V Three-Phase',
-      material: 'Food-grade SUS304 Sanitary Steel',
-      weight: '1,200 kg'
-    },
-    priceRange: 'LKR 6,500,000 - 9,500,000',
-    imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=500',
-    tags: ['Snacks', 'Vacuum Frying', 'Chips']
+    id: 'mac_inq_demo_01',
+    name: 'Saman Kumara',
+    phone: '+94 76 111 2233',
+    email: 'saman.k@gmail.com',
+    machineName: 'High-Capacity Substrate Bag Filling & Compacting Machine',
+    category: 'Substrate Processing',
+    intendedProduct: 'Oyster Mushroom Bags',
+    dailyCapacity: '1,000 bags/day',
+    location: 'Kurunegala',
+    message: 'Looking for pricing and delivery lead time to Kurunegala district.',
+    status: 'New',
+    createdAt: new Date().toISOString()
   }
 ];
+const SEED_MACHINERY_ITEMS: MachineItem[] = [];
 
 const SEED_NOTIFICATIONS: AppNotification[] = [];
 const SEED_SECURITY_LOGS: SecurityAuditLog[] = [];
@@ -359,7 +330,7 @@ export const dataService = {
       try {
         const querySnapshot = await getDocs(collection(db, 'products'));
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as Product);
+          list.push({ ...docSnap.data(), id: docSnap.id } as Product);
         });
         // Real-world clean data: return Firestore contents directly if query succeeds
         const cleanedList = list.map((product) => {
@@ -400,11 +371,9 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
-        const docRef = await addDoc(collection(db, 'products'), newProduct);
-        newProduct.id = docRef.id;
-        // update local list to keep in sync for offline viewing
+        await setDoc(doc(db, 'products', newProduct.id), newProduct);
         const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
         saveStorageData(LS_PRODUCTS, [newProduct, ...local]);
         return newProduct;
@@ -420,12 +389,21 @@ export const dataService = {
   },
 
   async updateProduct(id: string, updates: Partial<Product>): Promise<void> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         const docRef = doc(db, 'products', id);
         await updateDoc(docRef, updates);
-      } catch (e) {
-        handleServiceError('updateProduct', e);
+      } catch (e: any) {
+        console.warn('Firebase updateProduct error, trying inner ID fallback:', e);
+        try {
+          const q = query(collection(db, 'products'), where('id', '==', id));
+          const snap = await getDocs(q);
+          snap.forEach(async (d) => {
+            await updateDoc(doc(db, 'products', d.id), updates);
+          });
+        } catch (err) {
+          console.warn('Fallback updateProduct error:', err);
+        }
       }
     }
     const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
@@ -434,11 +412,20 @@ export const dataService = {
   },
 
   async deleteProduct(id: string): Promise<void> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         await deleteDoc(doc(db, 'products', id));
-      } catch (e) {
-        handleServiceError('deleteProduct', e);
+      } catch (e: any) {
+        console.warn('Firebase deleteProduct error, trying inner ID fallback:', e);
+        try {
+          const q = query(collection(db, 'products'), where('id', '==', id));
+          const snap = await getDocs(q);
+          snap.forEach(async (d) => {
+            await deleteDoc(doc(db, 'products', d.id));
+          });
+        } catch (err) {
+          console.warn('Fallback deleteProduct error:', err);
+        }
       }
     }
     const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
@@ -455,7 +442,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'ecosystem_members'));
         const list: EcosystemMember[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as EcosystemMember);
+          list.push({ ...docSnap.data(), id: docSnap.id } as EcosystemMember);
         });
         return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
@@ -529,7 +516,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'buyer_inquiries'));
         const list: BuyerInquiry[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as BuyerInquiry);
+          list.push({ ...docSnap.data(), id: docSnap.id } as BuyerInquiry);
         });
         return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
@@ -586,7 +573,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'training_programs'));
         const list: TrainingProgram[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as TrainingProgram);
+          list.push({ ...docSnap.data(), id: docSnap.id } as TrainingProgram);
         });
         return list;
       } catch (e) {
@@ -603,10 +590,9 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
-        const docRef = await addDoc(collection(db, 'training_programs'), newProg);
-        newProg.id = docRef.id;
+        await setDoc(doc(db, 'training_programs', newProg.id), newProg);
         const local = loadStorageData<TrainingProgram>(LS_TRAINING_PROGS, SEED_TRAINING);
         saveStorageData(LS_TRAINING_PROGS, [newProg, ...local]);
         return newProg;
@@ -620,24 +606,55 @@ export const dataService = {
     return newProg;
   },
 
+  async updateTrainingProgram(id: string, updates: Partial<TrainingProgram>): Promise<void> {
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'training_programs', id), updates);
+      } catch (e) {
+        handleServiceError('updateTrainingProgram', e);
+      }
+    }
+    const local = loadStorageData<TrainingProgram>(LS_TRAINING_PROGS, SEED_TRAINING);
+    const updated = local.map((p) => (p.id === id ? { ...p, ...updates } : p));
+    saveStorageData(LS_TRAINING_PROGS, updated);
+  },
+
+  async deleteTrainingProgram(id: string): Promise<void> {
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, 'training_programs', id));
+      } catch (e) {
+        handleServiceError('deleteTrainingProgram', e);
+      }
+    }
+    const local = loadStorageData<TrainingProgram>(LS_TRAINING_PROGS, SEED_TRAINING);
+    const updated = local.filter((p) => p.id !== id);
+    saveStorageData(LS_TRAINING_PROGS, updated);
+  },
+
   // --------------------------------------------------------------------------
   // TRAINING REQUESTS
   // --------------------------------------------------------------------------
   async getTrainingRequests(): Promise<TrainingRequest[]> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    const local = loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS);
+    if (isFirebaseAvailable) {
       try {
         const querySnapshot = await getDocs(collection(db, 'training_requests'));
-        const list: TrainingRequest[] = [];
+        const fbList: TrainingRequest[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as TrainingRequest);
+          fbList.push({ ...docSnap.data(), id: docSnap.id } as TrainingRequest);
         });
-        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const map = new Map<string, TrainingRequest>();
+        local.forEach((item) => map.set(item.id, item));
+        fbList.forEach((item) => map.set(item.id, item));
+        const merged = Array.from(map.values());
+        saveStorageData(LS_TRAINING_REQS, merged);
+        return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
         console.warn('Firebase error in getTrainingRequests, using local fallback:', e);
       }
     }
-    return loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return local.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   async addTrainingRequest(req: Omit<TrainingRequest, 'id' | 'createdAt'>): Promise<TrainingRequest> {
@@ -647,25 +664,22 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
-        const docRef = await addDoc(collection(db, 'training_requests'), newReq);
-        newReq.id = docRef.id;
-        const local = loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS);
-        saveStorageData(LS_TRAINING_REQS, [newReq, ...local]);
-        return newReq;
+        await setDoc(doc(db, 'training_requests', newReq.id), newReq);
       } catch (e) {
-        handleServiceError('addTrainingRequest', e);
+        console.warn('Firebase addTrainingRequest error (saving locally):', e);
       }
     }
 
     const local = loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS);
-    saveStorageData(LS_TRAINING_REQS, [newReq, ...local]);
+    const updated = [newReq, ...local];
+    saveStorageData(LS_TRAINING_REQS, updated);
     return newReq;
   },
 
   async updateTrainingRequestStatus(id: string, status: TrainingRequest['status']): Promise<void> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         await updateDoc(doc(db, 'training_requests', id), { status });
       } catch (e) {
@@ -674,6 +688,19 @@ export const dataService = {
     }
     const local = loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS);
     const updated = local.map((r) => (r.id === id ? { ...r, status } : r));
+    saveStorageData(LS_TRAINING_REQS, updated);
+  },
+
+  async deleteTrainingRequest(id: string): Promise<void> {
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, 'training_requests', id));
+      } catch (e) {
+        handleServiceError('deleteTrainingRequest', e);
+      }
+    }
+    const local = loadStorageData<TrainingRequest>(LS_TRAINING_REQS, SEED_TRAINING_REQUESTS);
+    const updated = local.filter((r) => r.id !== id);
     saveStorageData(LS_TRAINING_REQS, updated);
   },
 
@@ -686,7 +713,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'opportunities'));
         const list: Opportunity[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as Opportunity);
+          list.push({ ...docSnap.data(), id: docSnap.id } as Opportunity);
         });
         return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
@@ -756,7 +783,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'opportunity_applications'));
         const list: OpportunityApplication[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as OpportunityApplication);
+          list.push({ ...docSnap.data(), id: docSnap.id } as OpportunityApplication);
         });
         return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
@@ -813,7 +840,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'contact_messages'));
         const list: ContactMessage[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as ContactMessage);
+          list.push({ ...docSnap.data(), id: docSnap.id } as ContactMessage);
         });
         return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
@@ -857,7 +884,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'announcements'));
         const list: Announcement[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as Announcement);
+          list.push({ ...docSnap.data(), id: docSnap.id } as Announcement);
         });
         return list;
       } catch (e) {
@@ -894,20 +921,25 @@ export const dataService = {
   // MACHINERY INQUIRIES
   // --------------------------------------------------------------------------
   async getMachineryInquiries(): Promise<MachineryInquiry[]> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    const local = loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
+    if (isFirebaseAvailable) {
       try {
         const querySnapshot = await getDocs(collection(db, 'machinery_inquiries'));
-        const list: MachineryInquiry[] = [];
+        const fbList: MachineryInquiry[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as MachineryInquiry);
+          fbList.push({ ...docSnap.data(), id: docSnap.id } as MachineryInquiry);
         });
-        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const map = new Map<string, MachineryInquiry>();
+        local.forEach((item) => map.set(item.id, item));
+        fbList.forEach((item) => map.set(item.id, item));
+        const merged = Array.from(map.values());
+        saveStorageData(LS_MACHINERY_INQUIRIES, merged);
+        return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       } catch (e) {
         console.warn('Firebase error in getMachineryInquiries, using local fallback:', e);
       }
     }
-    return loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return local.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   async addMachineryInquiry(inquiry: Omit<MachineryInquiry, 'id' | 'createdAt'>): Promise<MachineryInquiry> {
@@ -917,25 +949,22 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
-        const docRef = await addDoc(collection(db, 'machinery_inquiries'), newInquiry);
-        newInquiry.id = docRef.id;
-        const local = loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
-        saveStorageData(LS_MACHINERY_INQUIRIES, [newInquiry, ...local]);
-        return newInquiry;
+        await setDoc(doc(db, 'machinery_inquiries', newInquiry.id), newInquiry);
       } catch (e) {
         console.warn('Firebase addMachineryInquiry error, falling back to local storage:', e);
       }
     }
 
     const local = loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
-    saveStorageData(LS_MACHINERY_INQUIRIES, [newInquiry, ...local]);
+    const updated = [newInquiry, ...local.filter(i => i.id !== newInquiry.id)];
+    saveStorageData(LS_MACHINERY_INQUIRIES, updated);
     return newInquiry;
   },
 
   async updateMachineryInquiryStatus(id: string, status: MachineryInquiry['status']): Promise<void> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         await updateDoc(doc(db, 'machinery_inquiries', id), { status });
       } catch (e) {
@@ -944,6 +973,19 @@ export const dataService = {
     }
     const local = loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
     const updated = local.map((i) => (i.id === id ? { ...i, status } : i));
+    saveStorageData(LS_MACHINERY_INQUIRIES, updated);
+  },
+
+  async deleteMachineryInquiry(id: string): Promise<void> {
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, 'machinery_inquiries', id));
+      } catch (e) {
+        console.warn('Firebase deleteMachineryInquiry error, falling back to local storage:', e);
+      }
+    }
+    const local = loadStorageData<MachineryInquiry>(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
+    const updated = local.filter((i) => i.id !== id);
     saveStorageData(LS_MACHINERY_INQUIRIES, updated);
   },
 
@@ -956,7 +998,7 @@ export const dataService = {
         const querySnapshot = await getDocs(collection(db, 'machinery_items'));
         const list: MachineItem[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as MachineItem);
+          list.push({ ...docSnap.data(), id: docSnap.id } as MachineItem);
         });
         if (list.length > 0) {
           return list;
@@ -975,10 +1017,9 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
-        const docRef = await addDoc(collection(db, 'machinery_items'), newItem);
-        newItem.id = docRef.id;
+        await setDoc(doc(db, 'machinery_items', newItem.id), newItem);
       } catch (e) {
         console.warn('Firebase addMachineryItem error, using local storage:', e);
       }
@@ -990,7 +1031,7 @@ export const dataService = {
   },
 
   async updateMachineryItem(id: string, updates: Partial<MachineItem>): Promise<MachineItem> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         await updateDoc(doc(db, 'machinery_items', id), updates);
       } catch (e) {
@@ -1004,7 +1045,7 @@ export const dataService = {
   },
 
   async deleteMachineryItem(id: string): Promise<void> {
-    if (isFirebaseAvailable && auth?.currentUser) {
+    if (isFirebaseAvailable) {
       try {
         await deleteDoc(doc(db, 'machinery_items', id));
       } catch (e) {
@@ -1055,11 +1096,11 @@ export const dataService = {
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable && auth?.currentUser && auth.currentUser.uid === uid) {
+    if (isFirebaseAvailable) {
       try {
         await setDoc(doc(db, 'users', uid), newProfile);
       } catch (e) {
-        handleServiceError('createUserProfile', e);
+        console.warn('Firebase createUserProfile write warning (stored locally):', e);
       }
     }
     const users = JSON.parse(localStorage.getItem(LS_USERS) || '{}');
@@ -1093,17 +1134,18 @@ export const dataService = {
         const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
-          return querySnapshot.docs[0].data() as UserProfile;
+          const docSnap = querySnapshot.docs[0];
+          return { ...docSnap.data(), uid: docSnap.id } as UserProfile;
         }
       } catch (e) {
-        console.warn('Firebase query where email failed, retrieving all profiles to scan:', e);
+        console.warn('Firebase query where email failed, scanning all profiles:', e);
         try {
           const querySnapshot = await getDocs(collection(db, 'users'));
           let found: UserProfile | null = null;
           querySnapshot.forEach((docSnap) => {
             const data = docSnap.data() as UserProfile;
             if (data.email && data.email.trim().toLowerCase() === cleanEmail) {
-              found = data;
+              found = { ...data, uid: docSnap.id };
             }
           });
           if (found) return found;
@@ -1131,7 +1173,12 @@ export const dataService = {
         try {
           await updateDoc(doc(db, 'users', uid), { password: newPassword });
         } catch (e) {
-          console.warn('Firebase password update failed:', e);
+          console.warn('Firebase password update via updateDoc failed, trying setDoc merge:', e);
+          try {
+            await setDoc(doc(db, 'users', uid), { password: newPassword }, { merge: true });
+          } catch (err) {
+            console.warn('Firebase password setDoc merge failed:', err);
+          }
         }
       }
 

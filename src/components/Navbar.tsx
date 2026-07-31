@@ -65,13 +65,13 @@ export default function Navbar({
             </div>
 
             {/* Desktop Nav Items (Aligned Left) */}
-            <div className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 flex-grow justify-start ml-1 xl:ml-3">
+            <div className="hidden lg:flex items-center space-x-0.5 xl:space-x-1 flex-grow justify-start ml-1 xl:ml-3 overflow-hidden">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   id={`nav-${item.id}`}
                   onClick={() => handleNavClick(item.id)}
-                  className={`px-1.5 py-1.5 xl:px-2.5 xl:py-2 rounded-xl text-xs xl:text-sm font-sans font-semibold tracking-wide whitespace-nowrap transition-all duration-200 shrink-0 ${
+                  className={`px-1.5 py-1.5 xl:px-2 xl:py-2 rounded-xl text-[11px] xl:text-xs font-sans font-semibold tracking-wide whitespace-nowrap transition-all duration-200 shrink min-w-0 ${
                     currentTab === item.id
                       ? 'bg-brand-dark-green text-white shadow-sm font-bold scale-[1.02]'
                       : 'text-brand-text/90 hover:bg-brand-cream hover:text-brand-dark-green hover:scale-[1.02]'
@@ -201,25 +201,25 @@ export default function Navbar({
                 <button
                   id="nav-dashboard"
                   onClick={() => handleNavClick('dashboard')}
-                  className={`flex items-center space-x-1 px-2 py-2 rounded-xl text-xs font-sans font-bold whitespace-nowrap transition-all duration-200 ${
+                  className={`flex items-center space-x-1 px-2 py-1.5 rounded-xl text-[11px] font-sans font-bold whitespace-nowrap transition-all duration-200 ${
                     currentTab === 'dashboard'
                       ? 'bg-brand-orange text-white shadow-md'
                       : 'bg-brand-brown text-white hover:bg-brand-dark-green shadow-sm hover:shadow-md'
                   }`}
                   title={language === 'EN' ? 'Dashboard' : 'නියමු පුවරුව'}
                 >
-                  <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  <span className="hidden 2xl:inline ml-1">
+                  <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden xl:inline ml-0.5">
                     {language === 'EN' ? 'Dashboard' : 'නියමු පුවරුව'}
                   </span>
                 </button>
                 <button
                   onClick={onLogout}
-                  className="flex items-center space-x-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-sans font-bold whitespace-nowrap transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[11px] font-sans font-bold whitespace-nowrap transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                   title="Logout"
                   id="btn-logout"
                 >
-                  <LogOut className="h-4 w-4 shrink-0" />
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden xl:inline">{language === 'EN' ? 'Logout' : 'ඉවත් වන්න'}</span>
                 </button>
               </div>

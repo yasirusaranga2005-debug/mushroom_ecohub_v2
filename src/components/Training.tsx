@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, GraduationCap, Clock, Calendar, CheckCircle2, User, Phone, MapPin, Send, AlertCircle, RefreshCw } from 'lucide-react';
+import { BookOpen, GraduationCap, Clock, Calendar, CheckCircle2, User, Phone, MapPin, Send, AlertCircle, RefreshCw, Award, Tag, ListChecks } from 'lucide-react';
 import { TrainingProgram } from '../types';
 import { dataService } from '../lib/dataService';
 import { DISTRICTS } from './JoinEcosystem';
@@ -18,6 +18,7 @@ export default function Training({ language }: TrainingProps) {
   const [reqData, setReqData] = useState({
     name: '',
     phone: '',
+    email: '',
     district: 'Colombo',
     preferredFormat: 'In-person Practical Session',
     message: ''
@@ -47,8 +48,9 @@ export default function Training({ language }: TrainingProps) {
     setReqData({
       name: '',
       phone: '',
+      email: '',
       district: 'Colombo',
-      preferredFormat: prog.format,
+      preferredFormat: prog.format || 'In-person Practical Session',
       message: ''
     });
     setShowBookingForm(false);
@@ -77,6 +79,7 @@ export default function Training({ language }: TrainingProps) {
       await dataService.addTrainingRequest({
         name: reqData.name,
         phone: reqData.phone,
+        email: reqData.email,
         district: reqData.district,
         trainingInterest: selectedProg.title,
         preferredFormat: reqData.preferredFormat,
@@ -147,13 +150,24 @@ export default function Training({ language }: TrainingProps) {
                       {prog.duration}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-[#8B4513] shrink-0" />
-                    <span>
-                      <strong className="text-[#2D2D2A]">{language === 'EN' ? 'Format: ' : 'ක්‍රමය: '}</strong>
-                      {prog.format}
-                    </span>
-                  </div>
+                  {prog.price && (
+                    <div className="flex items-center space-x-2">
+                      <Tag className="h-4 w-4 text-[#8B4513] shrink-0" />
+                      <span>
+                        <strong className="text-[#2D2D2A]">{language === 'EN' ? 'Price: ' : 'ගාස්තුව: '}</strong>
+                        {prog.price}
+                      </span>
+                    </div>
+                  )}
+                  {prog.location && (
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="h-4 w-4 text-[#8B4513] shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-[#2D2D2A]">{language === 'EN' ? 'Location: ' : 'ස්ථානය: '}</strong>
+                        {prog.location}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -172,17 +186,17 @@ export default function Training({ language }: TrainingProps) {
       {/* Training Request Form Popup Modal */}
       {selectedProg && (
         <div className="fixed inset-0 bg-[#2D2D2A]/60 flex items-center justify-center p-4 z-50 animate-fade-in" id="training-request-modal">
-          <div className="bg-white border border-[#5A5A40]/15 rounded-[32px] max-w-md w-full overflow-hidden shadow-2xl relative">
+          <div className="bg-white border border-[#5A5A40]/15 rounded-[32px] max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl relative">
             <div className="bg-[#5A5A40] text-white p-6 relative">
               <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#F5F5F0_1.5px,transparent_1.5px)] [background-size:16px_16px]"></div>
               <div className="relative z-10">
                 <h3 className="text-xl font-serif font-bold tracking-tight">
-                  {language === 'EN' ? 'Apply for Training Program' : 'පුහුණු පාඨමාලාවට අයදුම් කිරීම'}
+                  {language === 'EN' ? 'Training Program Details' : 'පුහුණු පාඨමාලා විස්තර'}
                 </h3>
                 <p className="text-[#F5F5F0]/85 text-xs mt-1">
                   {language === 'EN' 
-                    ? 'Submit your details to receive scheduling coordinates from trainers.' 
-                    : 'පුහුණු සැසිවාර වල විස්තර ලබාගැනීමට ඔබගේ තොරතුරු ඉදිරිපත් කරන්න.'}
+                    ? 'Review course features, schedule coordinates, and apply directly.' 
+                    : 'පාඨමාලා විස්තර පරීක්ෂා කර සෘජුවම අයදුම් කරන්න.'}
                 </p>
               </div>
             </div>
@@ -214,51 +228,115 @@ export default function Training({ language }: TrainingProps) {
                 <div className="space-y-4">
                   <div>
                     <h4 className="font-serif font-bold text-[#2D2D2A] text-lg">{selectedProg.title}</h4>
-                    <p className="text-[#2D2D2A]/80 text-sm mt-2 leading-relaxed">
+                    <p className="text-[#8B4513] font-semibold text-xs mt-1">
+                      <span className="font-bold">{language === 'EN' ? 'Target Audience: ' : 'ඉලක්කගත පිරිස: '}</span>
                       {selectedProg.whoItIsFor}
                     </p>
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-t border-b border-[#5A5A40]/10 py-4">
-                    <div className="flex flex-col space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-[#2D2D2A]/50 tracking-wider">
-                        {language === 'EN' ? 'Duration' : 'කාලසීමාව'}
-                      </span>
-                      <span className="text-sm font-semibold text-[#2D2D2A] flex items-center space-x-1.5">
-                        <Clock className="h-4 w-4 text-[#8B4513]" />
-                        <span>{selectedProg.duration}</span>
-                      </span>
+
+                  {/* Course Description */}
+                  {selectedProg.description && (
+                    <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+                      <h5 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-1">
+                        {language === 'EN' ? 'Course Description' : 'පාඨමාලා විස්තරය'}
+                      </h5>
+                      <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line font-sans">
+                        {selectedProg.description}
+                      </p>
                     </div>
-                    <div className="flex flex-col space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-[#2D2D2A]/50 tracking-wider">
-                        {language === 'EN' ? 'Format' : 'ක්‍රමය'}
-                      </span>
-                      <span className="text-sm font-semibold text-[#2D2D2A] flex items-center space-x-1.5">
-                        <Calendar className="h-4 w-4 text-[#8B4513]" />
-                        <span>{selectedProg.format}</span>
-                      </span>
+                  )}
+
+                  {/* Key Metadata Details Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-b border-[#5A5A40]/10 py-4 text-xs">
+                    <div className="flex items-start space-x-2.5">
+                      <Clock className="h-4 w-4 text-[#8B4513] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="block font-bold text-stone-800">{language === 'EN' ? 'Duration' : 'කාලසීමාව'}</span>
+                        <span className="text-stone-600">{selectedProg.duration}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-2.5">
+                      <MapPin className="h-4 w-4 text-[#8B4513] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="block font-bold text-stone-800">{language === 'EN' ? 'Location' : 'ස්ථානය'}</span>
+                        <span className="text-stone-600">{selectedProg.location || 'Siyamira (Pvt) Ltd Training Centre, Sri Lanka'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-2.5">
+                      <Tag className="h-4 w-4 text-[#8B4513] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="block font-bold text-stone-800">{language === 'EN' ? 'Training Price' : 'ගාස්තුව'}</span>
+                        <span className="text-stone-600">{selectedProg.price || 'LKR 10,000 – 25,000 per participant'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-2.5">
+                      <Phone className="h-4 w-4 text-[#8B4513] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="block font-bold text-stone-800">{language === 'EN' ? 'Contact Number' : 'දුරකථන අංකය'}</span>
+                        <span className="text-stone-600">{selectedProg.contactNumber || '+94 76 094 0075'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-2.5 sm:col-span-2">
+                      <Award className="h-4 w-4 text-[#8B4513] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="block font-bold text-stone-800">{language === 'EN' ? 'Certificate' : 'සහතිකය'}</span>
+                        <span className="text-stone-600">{selectedProg.certificate || 'Optional'}</span>
+                      </div>
                     </div>
                   </div>
-                  
-                  <div className="bg-[#F5F5F0] rounded-xl p-4">
-                    <p className="text-xs text-[#2D2D2A]/70 leading-relaxed font-sans italic">
-                      {language === 'EN' 
-                        ? 'This program covers practical, hands-on techniques designed to elevate your mushroom farming output and quality.' 
-                        : 'ඔබගේ හතු වගාවේ අස්වැන්න සහ ගුණාත්මක බව වැඩිදියුණු කිරීම සඳහා අවශ්‍ය ප්‍රායෝගික දැනුම මෙම පාඨමාලාවෙන් ලබා දේ.'}
-                    </p>
-                  </div>
+
+                  {/* Training Features (Separate Bullet Points) */}
+                  {(() => {
+                    let featureList: string[] = [];
+                    if (Array.isArray(selectedProg.features)) {
+                      featureList = selectedProg.features;
+                    } else if (typeof selectedProg.features === 'string' && selectedProg.features.trim()) {
+                      featureList = selectedProg.features.split('\n').map(s => s.trim()).filter(Boolean);
+                    } else if (selectedProg.format) {
+                      featureList = [selectedProg.format];
+                    } else {
+                      featureList = [
+                        'Classroom Theory Sessions',
+                        'Hands-on Practical Training',
+                        'Live Product Demonstrations',
+                        'Business Guidance and Technical Support',
+                        'Certificate of Participation (Optional)'
+                      ];
+                    }
+
+                    return (
+                      <div className="bg-[#F5F5F0] rounded-2xl p-4 space-y-2 border border-[#5A5A40]/10">
+                        <h5 className="text-xs font-serif font-bold text-[#2D2D2A] flex items-center gap-1.5 uppercase tracking-wider">
+                          <ListChecks className="h-4 w-4 text-[#8B4513]" />
+                          <span>{language === 'EN' ? 'Training Features' : 'පුහුණු විශේෂාංග'}</span>
+                        </h5>
+                        <ul className="space-y-1.5 pt-1">
+                          {featureList.map((feat, idx) => (
+                            <li key={idx} className="text-xs text-[#2D2D2A]/85 flex items-start space-x-2 font-sans">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#8B4513] mt-1.5 shrink-0"></span>
+                              <span className="leading-snug">{feat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="pt-2 flex gap-3">
                   <button
                     onClick={() => setSelectedProg(null)}
-                    className="flex-1 py-3 bg-white hover:bg-stone-50 border border-[#D5DAD0] text-[#2D2D2A] text-sm font-serif font-bold rounded-xl transition"
+                    className="flex-1 py-3 bg-white hover:bg-stone-50 border border-[#D5DAD0] text-[#2D2D2A] text-sm font-serif font-bold rounded-xl transition cursor-pointer"
                   >
                     {language === 'EN' ? 'Cancel' : 'අවලංගු කරන්න'}
                   </button>
                   <button
                     onClick={() => setShowBookingForm(true)}
-                    className="flex-1 py-3 bg-[#8B4513] hover:bg-[#733A0F] text-white text-sm font-serif font-bold rounded-xl transition"
+                    className="flex-1 py-3 bg-[#8B4513] hover:bg-[#733A0F] text-white text-sm font-serif font-bold rounded-xl transition cursor-pointer"
                   >
                     {language === 'EN' ? 'Book a Slot' : 'අයදුම් කරන්න'}
                   </button>
@@ -319,6 +397,24 @@ export default function Training({ language }: TrainingProps) {
                       value={reqData.phone}
                       onChange={handleInputChange}
                       placeholder="e.g. 0771234567"
+                      className="w-full pl-9 pr-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div>
+                  <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                    {language === 'EN' ? 'Email Address' : 'විද්‍යුත් තැපෑල'}
+                  </label>
+                  <div className="relative">
+                    <Send className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#2D2D2A]/40" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={reqData.email}
+                      onChange={handleInputChange}
+                      placeholder="e.g. trainee@example.com"
                       className="w-full pl-9 pr-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
                     />
                   </div>

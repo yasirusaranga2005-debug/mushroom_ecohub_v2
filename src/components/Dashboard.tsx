@@ -37,7 +37,8 @@ import {
   CloudLightning,
   Sun,
   Sprout,
-  UserPlus
+  UserPlus,
+  Send
 } from 'lucide-react';
 import {
   UserProfile,
@@ -55,8 +56,57 @@ import {
   AppNotification
 } from '../types';
 import { dataService } from '../lib/dataService';
-import { sendAdminCreatedUserEmail } from '../lib/emailService';
+import { sendAdminCreatedUserEmail, sendTrainingResponseEmail } from '../lib/emailService';
 import { DISTRICTS } from './JoinEcosystem';
+
+export const formatDateSafe = (dateString?: string): string => {
+  if (!dateString) return 'N/A';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString();
+  } catch (e) {
+    return 'N/A';
+  }
+};
+
+export const compressImageFileToBase64 = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
 
 interface DashboardProps {
   language: 'EN' | 'SI';
@@ -196,21 +246,29 @@ export default function Dashboard({
   const [productForm, setProductForm] = useState({
     name: '',
     category: 'Fresh Oyster Mushroom',
+    customCategory: '',
     description: '',
     district: currentUser.district || 'Colombo',
     minimumOrder: '',
     monthlyCapacity: '',
     priceRange: '',
     imageUrl: '',
+    images: [] as string[],
     status: 'Available' as Product['status']
   });
 
   const [showAddProgram, setShowAddProgram] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<TrainingProgram | null>(null);
   const [programForm, setProgramForm] = useState({
     title: '',
     whoItIsFor: '',
     duration: '',
-    format: 'In-person Practical Session'
+    description: '',
+    location: '',
+    price: '',
+    contactNumber: '',
+    certificate: 'Optional' as 'Yes' | 'No' | 'Optional',
+    features: ''
   });
 
   const [showAddOpportunity, setShowAddOpportunity] = useState(false);
@@ -245,6 +303,72 @@ export default function Dashboard({
   const [memberRoleFilter, setMemberRoleFilter] = useState('All');
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState('All');
   const [machineryStatusFilter, setMachineryStatusFilter] = useState('All');
+  const [trainingReqStatusFilter, setTrainingReqStatusFilter] = useState('All');
+
+  // Training Request Direct Reply state
+  const [replyingReq, setReplyingReq] = useState<TrainingRequest | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+
+  // Universal Delete Confirmation Modal state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    show: boolean;
+    itemId: string;
+    itemType: string;
+    itemLabel: string;
+    onConfirm: () => Promise<void>;
+  }>({ show: false, itemId: '', itemType: '', itemLabel: '', onConfirm: async () => {} });
+
+  const handleSendTrainingReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyingReq || !replyText.trim()) return;
+
+    setSendingReply(true);
+    try {
+      const targetEmail = replyingReq.email || (replyingReq as any).buyerEmail || '';
+      
+      if (targetEmail) {
+        await sendTrainingResponseEmail(
+          replyingReq.name,
+          targetEmail,
+          replyingReq.trainingInterest,
+          replyingReq.status,
+          replyText.trim()
+        );
+      }
+
+      if (targetEmail) {
+        const matchingUser = userProfiles.find(u => u.email && u.email.toLowerCase() === targetEmail.toLowerCase());
+        if (matchingUser) {
+          await dataService.addNotification({
+            userId: matchingUser.uid,
+            title: `Training Request Update: ${replyingReq.trainingInterest}`,
+            message: `Status: ${replyingReq.status}. Note: "${replyText.trim()}"`,
+            type: 'info',
+            read: false
+          });
+        }
+      }
+
+      setFeedback({
+        type: 'success',
+        message: language === 'EN'
+          ? `Direct response message sent to ${replyingReq.name} successfully!`
+          : `${replyingReq.name} වෙත සාර්ථකව පණිවිඩය යවන ලදී!`
+      });
+
+      setReplyingReq(null);
+      setReplyText('');
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        type: 'error',
+        message: language === 'EN' ? 'Failed to send response message.' : 'පණිවිඩය යැවීමට නොහැකි විය.'
+      });
+    } finally {
+      setSendingReply(false);
+    }
+  };
 
   // Admin manual user creation state
   const [showAdminAddUserModal, setShowAdminAddUserModal] = useState(false);
@@ -542,15 +666,32 @@ export default function Dashboard({
   const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const finalCategory = productForm.category === 'CUSTOM' ? (productForm.customCategory.trim() || 'General') : productForm.category;
+      const finalImages = productForm.images.length > 0 ? productForm.images : (productForm.imageUrl ? [productForm.imageUrl] : []);
+      const primaryImage = finalImages[0] || productForm.imageUrl || '';
+
+      const payload = {
+        name: productForm.name,
+        category: finalCategory,
+        description: productForm.description,
+        district: productForm.district,
+        minimumOrder: productForm.minimumOrder,
+        monthlyCapacity: productForm.monthlyCapacity,
+        priceRange: productForm.priceRange,
+        imageUrl: primaryImage,
+        images: finalImages,
+        status: productForm.status
+      };
+
       if (editingProduct) {
-        await dataService.updateProduct(editingProduct.id, productForm);
+        await dataService.updateProduct(editingProduct.id, payload);
         setFeedback({
           type: 'success',
           message: language === 'EN' ? 'Product updated successfully.' : 'නිෂ්පාදන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී.'
         });
       } else {
         await dataService.addProduct({
-          ...productForm,
+          ...payload,
           supplierName: currentUser.fullName,
           supplierId: currentUser.uid
         });
@@ -561,6 +702,19 @@ export default function Dashboard({
       }
       setShowAddProduct(false);
       setEditingProduct(null);
+      setProductForm({
+        name: '',
+        category: 'Fresh Oyster Mushroom',
+        customCategory: '',
+        description: '',
+        district: currentUser.district || 'Colombo',
+        minimumOrder: '',
+        monthlyCapacity: '',
+        priceRange: '',
+        imageUrl: '',
+        images: [],
+        status: 'Available'
+      });
       refreshAllData();
     } catch (err: any) {
       console.error(err);
@@ -573,15 +727,30 @@ export default function Dashboard({
 
   const handleEditProduct = (prod: Product) => {
     setEditingProduct(prod);
+    const existingImages = prod.images && prod.images.length > 0 ? prod.images : (prod.imageUrl ? [prod.imageUrl] : []);
+    const isDefaultCategory = [
+      'Fresh Oyster Mushroom',
+      'Fresh Button Mushroom',
+      'Dried Mushroom',
+      'Mushroom Powder',
+      'Mushroom Meatballs',
+      'Mushroom Sausages',
+      'Spawn',
+      'Grow Bags',
+      'Compost'
+    ].includes(prod.category);
+
     setProductForm({
       name: prod.name,
-      category: prod.category,
+      category: isDefaultCategory ? prod.category : 'CUSTOM',
+      customCategory: isDefaultCategory ? '' : prod.category,
       description: prod.description,
       district: prod.district,
       minimumOrder: prod.minimumOrder,
       monthlyCapacity: prod.monthlyCapacity,
       priceRange: prod.priceRange,
-      imageUrl: prod.imageUrl,
+      imageUrl: prod.imageUrl || (existingImages[0] || ''),
+      images: existingImages,
       status: prod.status
     });
     setShowAddProduct(true);
@@ -590,6 +759,7 @@ export default function Dashboard({
   const handleDeleteProduct = async (id: string) => {
     if (confirm(language === 'EN' ? 'Are you sure you want to delete this product?' : 'මෙම නිෂ්පාදනය ඉවත් කිරීමට ඔබට විශ්වාසද?')) {
       try {
+        setProducts((prev) => prev.filter((p) => p.id !== id));
         await dataService.deleteProduct(id);
         setFeedback({
           type: 'success',
@@ -602,6 +772,7 @@ export default function Dashboard({
           type: 'error',
           message: parseServiceError(err)
         });
+        refreshAllData();
       }
     }
   };
@@ -624,21 +795,35 @@ export default function Dashboard({
     }
   };
 
-  // Program Add
+  // Program Add / Edit / Delete
   const handleProgramSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await dataService.addTrainingProgram(programForm);
-      setFeedback({
-        type: 'success',
-        message: language === 'EN' ? 'Training program published successfully.' : 'පුහුණු වැඩසටහන සාර්ථකව ප්‍රකාශයට පත් කරන ලදී.'
-      });
+      if (editingProgram) {
+        await dataService.updateTrainingProgram(editingProgram.id, programForm);
+        setFeedback({
+          type: 'success',
+          message: language === 'EN' ? 'Training program updated successfully.' : 'පුහුණු වැඩසටහන සාර්ථකව යාවත්කාලීන කරන ලදී.'
+        });
+      } else {
+        await dataService.addTrainingProgram(programForm);
+        setFeedback({
+          type: 'success',
+          message: language === 'EN' ? 'Training program published successfully.' : 'පුහුණු වැඩසටහන සාර්ථකව ප්‍රකාශයට පත් කරන ලදී.'
+        });
+      }
       setShowAddProgram(false);
+      setEditingProgram(null);
       setProgramForm({
         title: '',
         whoItIsFor: '',
         duration: '',
-        format: 'In-person Practical Session'
+        description: '',
+        location: '',
+        price: '',
+        contactNumber: '',
+        certificate: 'Optional',
+        features: ''
       });
       refreshAllData();
     } catch (err: any) {
@@ -647,6 +832,82 @@ export default function Dashboard({
         type: 'error',
         message: parseServiceError(err)
       });
+    }
+  };
+
+  const handleEditProgram = (prog: TrainingProgram) => {
+    setEditingProgram(prog);
+    setProgramForm({
+      title: prog.title || '',
+      whoItIsFor: prog.whoItIsFor || '',
+      duration: prog.duration || '',
+      description: prog.description || '',
+      location: prog.location || '',
+      price: prog.price || '',
+      contactNumber: prog.contactNumber || '',
+      certificate: (prog.certificate as any) || 'Optional',
+      features: Array.isArray(prog.features) ? prog.features.join('\n') : (prog.features || '')
+    });
+    setShowAddProgram(true);
+  };
+
+  const handleDeleteProgram = async (id: string) => {
+    if (confirm(language === 'EN' ? 'Are you sure you want to delete this training program?' : 'මෙම පුහුණු වැඩසටහන ඉවත් කිරීමට ඔබට විශ්වාසද?')) {
+      try {
+        await dataService.deleteTrainingProgram(id);
+        setFeedback({
+          type: 'success',
+          message: language === 'EN' ? 'Program deleted successfully.' : 'වැඩසටහන සාර්ථකව ඉවත් කරන ලදී.'
+        });
+        refreshAllData();
+      } catch (err: any) {
+        console.error(err);
+        setFeedback({
+          type: 'error',
+          message: parseServiceError(err)
+        });
+      }
+    }
+  };
+
+  const handleDeleteTrainingReq = async (id: string, label?: string) => {
+    setDeleteConfirm({
+      show: true,
+      itemId: id,
+      itemType: 'training_request',
+      itemLabel: label || 'this training request',
+      onConfirm: async () => {
+        try {
+          await dataService.deleteTrainingRequest(id);
+          setFeedback({
+            type: 'success',
+            message: language === 'EN' ? 'Training request deleted.' : 'පුහුණු ඉල්ලීම ඉවත් කරන ලදී.'
+          });
+          refreshAllData();
+        } catch (err: any) {
+          console.error(err);
+          setFeedback({
+            type: 'error',
+            message: language === 'EN' ? 'Failed to delete training request.' : 'පුහුණු ඉල්ලීම ඉවත් කිරීමට නොහැකි විය.'
+          });
+        }
+        setDeleteConfirm({ show: false, itemId: '', itemType: '', itemLabel: '', onConfirm: async () => {} });
+      }
+    });
+  };
+
+  const handleDeleteMachineryInquiry = async (id: string) => {
+    if (confirm(language === 'EN' ? 'Are you sure you want to delete this inquiry?' : 'මෙම විමසීම ඉවත් කිරීමට ඔබට විශ්වාසද?')) {
+      try {
+        await dataService.deleteMachineryInquiry(id);
+        setFeedback({
+          type: 'success',
+          message: language === 'EN' ? 'Machinery inquiry deleted.' : 'යන්ත්‍ර විමසීම ඉවත් කරන ලදී.'
+        });
+        refreshAllData();
+      } catch (err: any) {
+        console.error(err);
+      }
     }
   };
 
@@ -1862,7 +2123,7 @@ export default function Dashboard({
                               </p>
                             </div>
                             <div className="text-right">
-                              <span className="text-[10px] block text-stone-400 mb-1">{new Date(inq.createdAt).toLocaleDateString()}</span>
+                              <span className="text-[10px] block text-stone-400 mb-1">{formatDateSafe(inq.createdAt)}</span>
                               <select
                                 value={inq.status}
                                 onChange={(e) => handleInquiryStatus(inq.id, e.target.value as BuyerInquiry['status'])}
@@ -1938,19 +2199,28 @@ export default function Dashboard({
                                 Buyer: <strong className="text-stone-700">{inq.name}</strong> ({inq.email} • {inq.phone})
                               </p>
                             </div>
-                            <div className="text-right">
-                              <span className="text-[10px] block text-stone-400 mb-1">{new Date(inq.createdAt).toLocaleDateString()}</span>
-                              <select
-                                value={inq.status}
-                                onChange={(e) => handleMachineryInquiryStatus(inq.id, e.target.value as any)}
-                                className="px-2.5 py-1 bg-stone-50 border border-stone-300 rounded-lg text-xs font-bold text-stone-800"
+                            <div className="text-right flex items-center space-x-2">
+                              <div>
+                                <span className="text-[10px] block text-stone-400 mb-1">{formatDateSafe(inq.createdAt)}</span>
+                                <select
+                                  value={inq.status}
+                                  onChange={(e) => handleMachineryInquiryStatus(inq.id, e.target.value as any)}
+                                  className="px-2.5 py-1 bg-stone-50 border border-stone-300 rounded-lg text-xs font-bold text-stone-800"
+                                >
+                                  <option value="New">New</option>
+                                  <option value="Contacted">Contacted</option>
+                                  <option value="In Discussion">In Discussion</option>
+                                  <option value="Converted">Converted</option>
+                                  <option value="Closed">Closed</option>
+                                </select>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteMachineryInquiry(inq.id)}
+                                className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded mt-4"
+                                title="Delete Inquiry"
                               >
-                                <option value="New">New</option>
-                                <option value="Contacted">Contacted</option>
-                                <option value="In Discussion">In Discussion</option>
-                                <option value="Converted">Converted</option>
-                                <option value="Closed">Closed</option>
-                              </select>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
 
@@ -1989,17 +2259,19 @@ export default function Dashboard({
                         setProductForm({
                           name: '',
                           category: 'Fresh Oyster Mushroom',
+                          customCategory: '',
                           description: '',
                           district: currentUser.district || 'Colombo',
                           minimumOrder: '',
                           monthlyCapacity: '',
                           priceRange: '',
                           imageUrl: '',
+                          images: [],
                           status: 'Available'
                         });
                         setShowAddProduct(true);
                       }}
-                      className="px-4 py-2 bg-[#5A5A40] hover:bg-[#4E4E37] text-white rounded-xl text-xs font-serif font-bold flex items-center space-x-1.5 border border-[#5A5A40]"
+                      className="px-4 py-2 bg-[#5A5A40] hover:bg-[#4E4E37] text-white rounded-xl text-xs font-serif font-bold flex items-center space-x-1.5 border border-[#5A5A40] cursor-pointer"
                     >
                       <Plus className="h-4 w-4" />
                       <span>Add Product</span>
@@ -2030,7 +2302,7 @@ export default function Dashboard({
                           <select
                             value={productForm.category}
                             onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white font-medium"
                           >
                             <option value="Fresh Oyster Mushroom">Fresh Oyster Mushroom</option>
                             <option value="Fresh Button Mushroom">Fresh Button Mushroom</option>
@@ -2041,7 +2313,18 @@ export default function Dashboard({
                             <option value="Spawn">Spawn (Seed)</option>
                             <option value="Grow Bags">Grow Bags</option>
                             <option value="Compost">Compost</option>
+                            <option value="CUSTOM">➕ Add Custom Category...</option>
                           </select>
+                          {productForm.category === 'CUSTOM' && (
+                            <input
+                              type="text"
+                              required
+                              value={productForm.customCategory}
+                              onChange={(e) => setProductForm({ ...productForm, customCategory: e.target.value })}
+                              placeholder="Type custom category name..."
+                              className="w-full mt-2 px-3 py-2 border border-amber-300 rounded-lg text-xs text-stone-800 bg-amber-50/50"
+                            />
+                          )}
                         </div>
 
                         <div className="sm:col-span-2">
@@ -2106,17 +2389,6 @@ export default function Dashboard({
                         </div>
 
                         <div>
-                          <label className="block text-stone-700 font-semibold text-xs mb-1">Image URL (Optional)</label>
-                          <input
-                            type="url"
-                            value={productForm.imageUrl}
-                            onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-                            placeholder="https://images.unsplash.com/..."
-                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
-                          />
-                        </div>
-
-                        <div>
                           <label className="block text-stone-700 font-semibold text-xs mb-1">Availability Status</label>
                           <select
                             value={productForm.status}
@@ -2126,6 +2398,115 @@ export default function Dashboard({
                             <option value="Available">Available</option>
                             <option value="Out of Stock">Out of Stock</option>
                           </select>
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-2 pt-2 border-t border-stone-200">
+                          <label className="block text-stone-700 font-semibold text-xs">
+                            Product Images (Multiple Images Supported)
+                          </label>
+
+                          {/* Image thumbnails preview list */}
+                          {(productForm.images || []).length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2 p-2.5 bg-stone-100/70 rounded-xl border border-stone-200">
+                              {(productForm.images || []).map((img, idx) => (
+                                <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-stone-300 bg-white shrink-0">
+                                  <img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = (productForm.images || []).filter((_, i) => i !== idx);
+                                      setProductForm({
+                                        ...productForm,
+                                        images: updated,
+                                        imageUrl: updated[0] || ''
+                                      });
+                                    }}
+                                    className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold shadow hover:bg-red-700 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                  {idx === 0 && (
+                                    <span className="absolute bottom-0 inset-x-0 bg-emerald-700/80 text-white text-[8px] text-center font-bold uppercase">
+                                      Primary
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Local File Upload */}
+                            <div>
+                              <label className="block text-stone-500 text-[10px] font-bold uppercase mb-1">
+                                Upload Local Image File(s)
+                              </label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={async (e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    const files = Array.from(e.target.files) as File[];
+                                    const base64List: string[] = [];
+                                    for (const file of files) {
+                                      try {
+                                        const b64 = await compressImageFileToBase64(file as File);
+                                        base64List.push(b64);
+                                      } catch (err) {
+                                        console.error("Image read error:", err);
+                                      }
+                                    }
+                                    if (base64List.length > 0) {
+                                      const merged = [...(productForm.images || []), ...base64List];
+                                      setProductForm({
+                                        ...productForm,
+                                        images: merged,
+                                        imageUrl: merged[0] || ''
+                                      });
+                                    }
+                                  }
+                                }}
+                                className="w-full text-xs text-stone-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#8B4513]/10 file:text-[#8B4513] hover:file:bg-[#8B4513]/20 cursor-pointer"
+                              />
+                            </div>
+
+                            {/* URL Input */}
+                            <div>
+                              <label className="block text-stone-500 text-[10px] font-bold uppercase mb-1">
+                                Add Image URL
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="url"
+                                  value={productForm.imageUrl}
+                                  onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
+                                  placeholder="https://..."
+                                  className="flex-1 px-3 py-1.5 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (productForm.imageUrl.trim()) {
+                                      const url = productForm.imageUrl.trim();
+                                      const currImages = productForm.images || [];
+                                      if (!currImages.includes(url)) {
+                                        const merged = [...currImages, url];
+                                        setProductForm({
+                                          ...productForm,
+                                          images: merged,
+                                          imageUrl: merged[0] || ''
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-stone-800 text-white text-xs font-bold rounded-lg hover:bg-stone-900 cursor-pointer shrink-0"
+                                >
+                                  Add
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
                         <div className="sm:col-span-2 flex gap-2 pt-2 justify-end">
@@ -2204,75 +2585,227 @@ export default function Dashboard({
                 </div>
               )}
 
-              {/* TRAINING REQUESTS TAB (TRAINER) */}
-              {activeTab === 'training_reqs' && currentUser.role === 'trainer' && (
+              {/* TRAINING REQUESTS TAB (ADMIN / TRAINER / STAFF) */}
+              {activeTab === 'training_reqs' && ['trainer', 'admin', 'staff'].includes(currentUser.role) && (
                 <div className="space-y-4 animate-fade-in" id="tab-trainer-requests">
-                  <h3 className="text-xl font-bold text-stone-900 mb-4">Trainee Applications</h3>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">
+                        {language === 'EN' ? 'Trainee Applications & Course Requests' : 'පුහුණු පාඨමාලා ඉල්ලීම්'}
+                      </h3>
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        {language === 'EN' ? 'Manage trainee applications, update status, and send direct messages.' : 'ශිෂ්‍ය ඉල්ලීම් කළමනාකරණය, තත්ත්වය යාවත්කාලීන කිරීම සහ පණිවිඩ යැවීම.'}
+                      </p>
+                    </div>
 
-                  {trainingRequests.length === 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {['All', 'New', 'Contacted', 'Scheduled', 'Completed'].map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setTrainingReqStatusFilter(st)}
+                          className={`px-3 py-1 rounded-lg text-xs font-serif font-bold border transition cursor-pointer ${
+                            trainingReqStatusFilter === st ? 'bg-[#8B4513] border-[#8B4513] text-white' : 'bg-white text-stone-600 border-[#5A5A40]/20 hover:bg-[#F5F5F0]'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {trainingRequests.filter(r => trainingReqStatusFilter === 'All' || r.status === trainingReqStatusFilter).length === 0 ? (
                     <div className="bg-white border border-stone-200 p-10 rounded-2xl text-center text-stone-400 text-xs">
-                      No training requests submitted yet.
+                      {language === 'EN' ? 'No training requests found for selected status.' : 'තෝරාගත් තත්ත්වය සඳහා පුහුණු ඉල්ලීම් නොමැත.'}
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {trainingRequests.map((trq) => (
-                        <div key={trq.id} className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3">
-                          <div className="flex justify-between items-start gap-4">
-                            <div>
-                              <span className="text-[9px] font-bold text-emerald-600 tracking-wider block uppercase">REQUESTED PROGRAM</span>
-                              <h4 className="font-bold text-stone-900 text-base">{trq.trainingInterest}</h4>
-                              <p className="text-xs text-stone-500">
-                                Applicant: {trq.name} ({trq.phone} • {trq.district} district)
+                      {trainingRequests
+                        .filter(r => trainingReqStatusFilter === 'All' || r.status === trainingReqStatusFilter)
+                        .map((trq) => (
+                          <div key={trq.id} className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3.5 shadow-sm hover:shadow-md transition">
+                            <div className="flex justify-between items-start gap-4">
+                              <div>
+                                <span className="text-[9px] font-bold text-[#8B4513] tracking-wider block uppercase">REQUESTED COURSE</span>
+                                <h4 className="font-bold text-stone-900 text-base">{trq.trainingInterest}</h4>
+                                <div className="text-xs text-stone-600 space-y-0.5 mt-1">
+                                  <p>
+                                    Applicant: <strong className="text-stone-800">{trq.name}</strong> ({trq.phone} • {trq.district} district)
+                                  </p>
+                                  {trq.email && (
+                                    <p className="text-stone-500 font-mono text-[11px]">
+                                      Email: <span className="text-indigo-600 font-semibold">{trq.email}</span>
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right flex items-center space-x-2">
+                                <div>
+                                  <span className="text-[10px] block text-stone-400 mb-1">{formatDateSafe(trq.createdAt)}</span>
+                                  <select
+                                    value={trq.status}
+                                    onChange={(e) => handleTrainingReqStatus(trq.id, e.target.value as TrainingRequest['status'])}
+                                    className="px-2.5 py-1 bg-stone-50 border border-stone-300 rounded-lg text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#8B4513]"
+                                  >
+                                    <option value="New">New</option>
+                                    <option value="Contacted">Contacted</option>
+                                    <option value="Scheduled">Scheduled</option>
+                                    <option value="Completed">Completed</option>
+                                  </select>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteTrainingReq(trq.id, trq.trainingInterest)}
+                                  className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded mt-4 cursor-pointer"
+                                  title="Delete Request"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-stone-50 p-3 rounded-xl border border-stone-100 text-stone-700">
+                              <div>
+                                <strong>Preferred Format:</strong> {trq.preferredFormat}
+                              </div>
+                              <div>
+                                <strong>District Location:</strong> {trq.district}
+                              </div>
+                            </div>
+
+                            {trq.message && (
+                              <p className="text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-100 italic">
+                                "{trq.message}"
                               </p>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[10px] block text-stone-400 mb-1">{new Date(trq.createdAt).toLocaleDateString()}</span>
-                              <select
-                                value={trq.status}
-                                onChange={(e) => handleTrainingReqStatus(trq.id, e.target.value as TrainingRequest['status'])}
-                                className="px-2.5 py-1 bg-stone-50 border border-stone-300 rounded-lg text-xs font-bold text-stone-800"
+                            )}
+
+                            {/* Direct Action Bar */}
+                            <div className="pt-2 border-t border-stone-100 flex items-center justify-between gap-3">
+                              <span className="text-[10px] text-stone-400 font-mono">ID: {trq.id}</span>
+                              <button
+                                onClick={() => {
+                                  setReplyingReq(trq);
+                                  setReplyText(`Dear ${trq.name},\n\nThank you for applying for our "${trq.trainingInterest}" program.\n\nWe have received your application. Your training session has been scheduled.\n\nContact Desk: +94 76 094 0075\nRegards,\nMushroom Eco Hub Training Desk`);
+                                }}
+                                className="px-3.5 py-1.5 bg-[#8B4513] hover:bg-[#733A0F] text-white rounded-xl text-xs font-serif font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
                               >
-                                <option value="New">New</option>
-                                <option value="Contacted">Contacted</option>
-                                <option value="Scheduled">Scheduled</option>
-                                <option value="Completed">Completed</option>
-                              </select>
+                                <Send className="h-3.5 w-3.5" />
+                                <span>{language === 'EN' ? 'Send Direct Message / Email' : 'පණිවිඩයක් / Email යවන්න'}</span>
+                              </button>
                             </div>
                           </div>
-
-                          <div className="grid grid-cols-2 gap-4 text-xs bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-stone-700">
-                            <div>
-                              <strong>Format Preference:</strong> {trq.preferredFormat}
-                            </div>
-                          </div>
-
-                          <p className="text-xs text-stone-600 bg-stone-50 p-2 rounded italic">
-                            "{trq.message || 'No additional message.'}"
-                          </p>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* MANAGE CLASSES (TRAINER) */}
-              {activeTab === 'programs' && currentUser.role === 'trainer' && (
+              {/* Direct Reply Modal to Trainee */}
+              {replyingReq && (
+                <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-white border border-stone-200 rounded-[28px] max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+                    <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+                      <div>
+                        <h4 className="font-serif font-bold text-stone-900 text-lg">
+                          {language === 'EN' ? 'Send Response to Trainee' : 'ශිෂ්‍යයා වෙත පණිවිඩයක් යැවීම'}
+                        </h4>
+                        <p className="text-xs text-stone-500 font-sans mt-0.5">
+                          To: <strong className="text-stone-800">{replyingReq.name}</strong> ({replyingReq.email || replyingReq.phone})
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setReplyingReq(null)}
+                        className="text-stone-400 hover:text-stone-600 p-1 text-lg font-bold cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSendTrainingReply} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1">
+                          {language === 'EN' ? 'Message Content' : 'පණිවිඩය'}
+                        </label>
+                        <textarea
+                          rows={5}
+                          required
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Write instructions, dates, or payment details..."
+                          className="w-full p-3 border border-stone-300 rounded-xl text-xs font-sans text-stone-800 focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none"
+                        ></textarea>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800 flex items-start gap-2">
+                        <Send className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                        <span>
+                          {language === 'EN' 
+                            ? 'This message will be dispatched via EmailJS direct mail and displayed on the user system notification feed.'
+                            : 'මෙම පණිවිඩය විද්‍යුත් තැපෑල (EmailJS) සහ පද්ධති නිවේදන හරහා සෘජුවම ශිෂ්‍යයා වෙත යවනු ලැබේ.'}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setReplyingReq(null)}
+                          className="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold font-serif transition cursor-pointer"
+                        >
+                          {language === 'EN' ? 'Cancel' : 'අවලංගු කරන්න'}
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={sendingReply}
+                          className="flex-1 py-2.5 bg-[#8B4513] hover:bg-[#733A0F] disabled:opacity-50 text-white rounded-xl text-xs font-bold font-serif flex items-center justify-center space-x-2 transition cursor-pointer"
+                        >
+                          {sendingReply ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              <span>{language === 'EN' ? 'Send Message Now' : 'දැනුම් දෙන්න'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* MANAGE CLASSES / PROGRAMS (ADMIN / TRAINER / STAFF) */}
+              {activeTab === 'programs' && ['trainer', 'admin', 'staff'].includes(currentUser.role) && (
                 <div className="space-y-6 animate-fade-in" id="tab-trainer-programs">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-stone-900">Manage Training Programs</h3>
+                    <h3 className="text-xl font-bold text-stone-900">
+                      {language === 'EN' ? 'Manage Training Programs' : 'පුහුණු පාඨමාලා කළමනාකරණය'}
+                    </h3>
                     <button
-                      onClick={() => setShowAddProgram(true)}
-                      className="px-4 py-2 bg-[#5A5A40] hover:bg-[#4E4E37] text-white rounded-xl text-xs font-serif font-bold flex items-center space-x-1.5 border border-[#5A5A40]"
+                      onClick={() => {
+                        setEditingProgram(null);
+                        setProgramForm({
+                          title: '',
+                          whoItIsFor: '',
+                          duration: '',
+                          description: '',
+                          location: '',
+                          price: '',
+                          contactNumber: '',
+                          certificate: 'Optional',
+                          features: ''
+                        });
+                        setShowAddProgram(true);
+                      }}
+                      className="px-4 py-2 bg-[#5A5A40] hover:bg-[#4E4E37] text-white rounded-xl text-xs font-serif font-bold flex items-center space-x-1.5 border border-[#5A5A40] cursor-pointer"
                     >
                       <Plus className="h-4 w-4" />
-                      <span>Post Training Course</span>
+                      <span>{language === 'EN' ? 'Post Training Course' : 'නව පාඨමාලාවක් එක් කරන්න'}</span>
                     </button>
                   </div>
 
                   {showAddProgram && (
                     <div className="bg-stone-50 border border-emerald-100 p-6 rounded-3xl space-y-4">
-                      <h4 className="font-bold text-stone-900 text-sm">Add New Training Program</h4>
+                      <h4 className="font-bold text-stone-900 text-sm">
+                        {editingProgram ? 'Edit Training Program' : 'Add New Training Program'}
+                      </h4>
                       <form onSubmit={handleProgramSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-stone-700 font-semibold text-xs mb-1">Course Title</label>
@@ -2281,7 +2814,7 @@ export default function Dashboard({
                             required
                             value={programForm.title}
                             onChange={(e) => setProgramForm({ ...programForm, title: e.target.value })}
-                            placeholder="e.g. Organic Substrate Pasteurization Masterclass"
+                            placeholder="e.g. Commercial Mushroom Farming Masterclass"
                             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
                           />
                         </div>
@@ -2293,7 +2826,7 @@ export default function Dashboard({
                             required
                             value={programForm.whoItIsFor}
                             onChange={(e) => setProgramForm({ ...programForm, whoItIsFor: e.target.value })}
-                            placeholder="e.g. Smallholders wanting pure spore cultures"
+                            placeholder="e.g. Beginners, Commercial Growers, Entrepreneurs"
                             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
                           />
                         </div>
@@ -2311,22 +2844,82 @@ export default function Dashboard({
                         </div>
 
                         <div>
-                          <label className="block text-stone-700 font-semibold text-xs mb-1">Format</label>
-                          <select
-                            value={programForm.format}
-                            onChange={(e) => setProgramForm({ ...programForm, format: e.target.value })}
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">Training Location</label>
+                          <input
+                            type="text"
+                            value={programForm.location}
+                            onChange={(e) => setProgramForm({ ...programForm, location: e.target.value })}
+                            placeholder="e.g. Siyamira (Pvt) Ltd Training Centre, Sri Lanka"
                             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">Training Price</label>
+                          <input
+                            type="text"
+                            value={programForm.price}
+                            onChange={(e) => setProgramForm({ ...programForm, price: e.target.value })}
+                            placeholder="e.g. LKR 10,000 – 25,000 per participant"
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">Contact Number</label>
+                          <input
+                            type="text"
+                            value={programForm.contactNumber}
+                            onChange={(e) => setProgramForm({ ...programForm, contactNumber: e.target.value })}
+                            placeholder="e.g. +94 76 094 0075"
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">Certificate</label>
+                          <select
+                            value={programForm.certificate}
+                            onChange={(e) => setProgramForm({ ...programForm, certificate: e.target.value as any })}
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white font-medium"
                           >
-                            <option value="In-person Practical Session">In-person Practical Session</option>
-                            <option value="Online Video Webinar">Online Video Webinar</option>
-                            <option value="Hybrid (Theory + Site Visit)">Hybrid (Theory + Site Visit)</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                            <option value="Optional">Optional</option>
                           </select>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">Course Description (Multiline Text)</label>
+                          <textarea
+                            rows={3}
+                            value={programForm.description}
+                            onChange={(e) => setProgramForm({ ...programForm, description: e.target.value })}
+                            placeholder="Detailed description of the training program..."
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                          ></textarea>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-stone-700 font-semibold text-xs mb-1">
+                            Training Features (Enter each feature on a new line)
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={programForm.features}
+                            onChange={(e) => setProgramForm({ ...programForm, features: e.target.value })}
+                            placeholder={'Classroom Theory Sessions\nHands-on Practical Training\nLive Product Demonstrations\nBusiness Guidance and Technical Support\nCertificate of Participation (Optional)'}
+                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs text-stone-800 bg-white"
+                          ></textarea>
                         </div>
 
                         <div className="sm:col-span-2 flex gap-2 justify-end">
                           <button
                             type="button"
-                            onClick={() => setShowAddProgram(false)}
+                            onClick={() => {
+                              setShowAddProgram(false);
+                              setEditingProgram(null);
+                            }}
                             className="px-4 py-2 bg-stone-200 text-stone-700 text-xs font-bold rounded-xl"
                           >
                             Cancel
@@ -2335,7 +2928,7 @@ export default function Dashboard({
                             type="submit"
                             className="px-4 py-2 bg-[#8B4513] hover:bg-[#73390F] text-white text-xs font-serif font-bold rounded-xl"
                           >
-                            Post Course
+                            {editingProgram ? 'Update Course' : 'Post Course'}
                           </button>
                         </div>
                       </form>
@@ -2350,7 +2943,22 @@ export default function Dashboard({
                           <p className="text-xs text-stone-500">For: {prog.whoItIsFor}</p>
                           <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mt-1.5">{prog.duration} • {prog.format}</p>
                         </div>
-                        <span className="text-xs text-stone-400 font-medium">Active Course</span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleEditProgram(prog)}
+                            className="p-1.5 text-stone-500 hover:text-[#8B4513] hover:bg-amber-50 rounded"
+                            title="Edit Program"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProgram(prog.id)}
+                            className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Delete Program"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2636,7 +3244,7 @@ export default function Dashboard({
                               <h4 className="font-bold text-stone-900 text-base">{msg.name}</h4>
                               <p className="text-xs text-stone-500">{msg.email} • {msg.phone}</p>
                             </div>
-                            <span className="text-[10px] text-stone-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                            <span className="text-[10px] text-stone-400">{formatDateSafe(msg.createdAt)}</span>
                           </div>
                           <p className="text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-100 italic">
                             "{msg.message}"
@@ -3746,6 +4354,43 @@ export default function Dashboard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============ UNIVERSAL DELETE CONFIRMATION MODAL ============ */}
+      {deleteConfirm.show && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-fade-in">
+          <div className="bg-white border border-stone-200 rounded-[28px] max-w-sm w-full p-6 space-y-5 shadow-2xl relative">
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-red-50 rounded-full mx-auto">
+                <AlertTriangle className="h-7 w-7 text-red-500" />
+              </div>
+              <h4 className="font-serif font-bold text-stone-900 text-lg">
+                {language === 'EN' ? 'Confirm Delete' : 'ඉවත් කිරීම තහවුරු කරන්න'}
+              </h4>
+              <p className="text-xs text-stone-600 font-sans leading-relaxed">
+                {language === 'EN'
+                  ? <>Are you sure you want to permanently delete <strong className="text-red-600">&quot;{deleteConfirm.itemLabel}&quot;</strong>? This action cannot be undone.</>
+                  : <><strong className="text-red-600">&quot;{deleteConfirm.itemLabel}&quot;</strong> ස්ථිරවම ඉවත් කිරීමට ඔබට විශ්වාසද? මෙය ආපසු හරවා ගත නොහැක.</>}
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm({ show: false, itemId: '', itemType: '', itemLabel: '', onConfirm: async () => {} })}
+                className="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold font-serif transition cursor-pointer"
+              >
+                {language === 'EN' ? 'Cancel' : 'අවලංගු කරන්න'}
+              </button>
+              <button
+                onClick={() => deleteConfirm.onConfirm()}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold font-serif flex items-center justify-center space-x-1.5 transition cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{language === 'EN' ? 'Yes, Delete' : 'ඔව්, ඉවත් කරන්න'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

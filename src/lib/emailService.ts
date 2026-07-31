@@ -220,3 +220,57 @@ export const sendPasswordResetSuccessEmail = async (name: string, toEmail: strin
     return false;
   }
 };
+
+export const sendTrainingResponseEmail = async (
+  traineeName: string,
+  toEmail: string,
+  courseTitle: string,
+  status: string,
+  replyMessage: string
+): Promise<boolean> => {
+  try {
+    const subjectName = `${traineeName} [ TRAINING APPLICATION (${status.toUpperCase()}): ${courseTitle} ]`;
+    const templateParams = {
+      user_name: subjectName,
+      name: subjectName,
+      to_name: subjectName,
+      to_email: toEmail,
+      email: toEmail,
+      message: `Dear ${traineeName},\n\nUpdate regarding your booking application for '${courseTitle}':\n\nStatus: ${status.toUpperCase()}\n\nNote from Trainer/Admin:\n"${replyMessage}"\n\nThank you for choosing Mushroom Eco Hub Training Academy!\n\nContact Desk: +94 76 094 0075\nWebsite: Mushroom Eco Hub Sri Lanka`,
+    };
+
+    console.log('Sending training response email via EmailJS to:', toEmail);
+    const response = await emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY);
+    console.log('Training response email sent successfully!', response.status, response.text);
+    return true;
+  } catch (error: any) {
+    console.error('Failed to send training response email via SDK:', error);
+    try {
+      const subjectName = `${traineeName} [ TRAINING APPLICATION (${status.toUpperCase()}): ${courseTitle} ]`;
+      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: SERVICE_ID,
+          template_id: TEMPLATE_ID,
+          user_id: PUBLIC_KEY,
+          template_params: {
+            user_name: subjectName,
+            name: subjectName,
+            to_name: subjectName,
+            to_email: toEmail,
+            email: toEmail,
+            message: `Dear ${traineeName},\n\nUpdate regarding your booking application for '${courseTitle}':\n\nStatus: ${status.toUpperCase()}\n\nNote from Trainer/Admin:\n"${replyMessage}"\n\nThank you for choosing Mushroom Eco Hub Training Academy!\n\nContact Desk: +94 76 094 0075\nWebsite: Mushroom Eco Hub Sri Lanka`,
+          }
+        })
+      });
+      if (res.ok) {
+        console.log('Training response email sent via REST API fallback!');
+        return true;
+      }
+    } catch (fallbackErr) {
+      console.error('Training response email fallback failed:', fallbackErr);
+    }
+    return false;
+  }
+};

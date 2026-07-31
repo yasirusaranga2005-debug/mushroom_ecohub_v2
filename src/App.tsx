@@ -227,30 +227,37 @@ export default function App() {
     }
     setForgotLoading(true);
     try {
-      const profile = await dataService.findProfileByEmail(forgotEmail);
-      if (profile) {
-        // Update user password in database (Firestore + LocalStorage)
-        await dataService.updateUserPassword(profile.uid, newPassword);
+      const cleanEmail = forgotEmail.trim().toLowerCase();
+      const profile = await dataService.findProfileByEmail(cleanEmail);
+      if (!profile) {
+        setAuthError(language === 'EN' 
+          ? 'No account found with this email address. Please check your email or contact system administration.' 
+          : 'මෙම විද්‍යුත් තැපෑලෙන් ගිණුමක් හමු නොවීය. කරුණාකර පරීක්ෂා කරන්න.');
+        setForgotLoading(false);
+        return;
       }
+
+      // Update user password in database (Firestore + LocalStorage)
+      await dataService.updateUserPassword(profile.uid, newPassword.trim());
 
       // Try Firebase auth update if signed in
       if (firebaseActive && auth && auth.currentUser) {
         try {
-          await firebaseUpdatePassword(auth.currentUser, newPassword);
+          await firebaseUpdatePassword(auth.currentUser, newPassword.trim());
         } catch (e) {
           console.warn('Firebase currentUser password update skipped/failed:', e);
         }
       }
 
       // Send success email
-      await sendPasswordResetSuccessEmail(profile?.fullName || forgotEmail.split('@')[0], forgotEmail);
+      await sendPasswordResetSuccessEmail(profile.fullName || cleanEmail.split('@')[0], cleanEmail);
 
       // Audit log
       await dataService.addSecurityAuditLog({
-        userId: profile?.uid || 'unknown',
-        userEmail: forgotEmail,
+        userId: profile.uid,
+        userEmail: cleanEmail,
         action: 'PASSWORD_RESET_SUCCESS',
-        details: `Password reset completed for ${forgotEmail} via OTP verification.`,
+        details: `Password reset completed for ${cleanEmail} via OTP verification.`,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
       });
 
@@ -504,47 +511,49 @@ export default function App() {
     try {
       if (authMode === 'signin') {
         // Sign In
-        let profile: UserProfile | null = await dataService.findProfileByEmail(authEmail);
+        const cleanAuthEmail = authEmail.trim().toLowerCase();
+        const cleanAuthPassword = authPassword.trim();
 
-        // Password verification check if custom/updated password exists on profile
-        if (profile && profile.password && profile.password !== authPassword) {
-          throw { code: 'auth/wrong-password', message: 'Incorrect email or password. Please try again.' };
-        }
-
-        if (firebaseActive && auth && (!profile || !profile.password)) {
-          try {
-            const userCredential = await signInWithEmailAndPassword(auth, authEmail, authPassword);
-            if (!profile) {
-              profile = await dataService.getUserProfile(userCredential.user.uid);
-            }
-          } catch (firebaseErr: any) {
-            const credentialErrors = [
-              'auth/wrong-password',
-              'auth/user-not-found',
-              'auth/invalid-credential',
-              'auth/user-disabled'
-            ];
-            if (credentialErrors.includes(firebaseErr.code)) {
-              throw firebaseErr;
-            }
-            console.warn('Firebase native sign-in failed. Using database profile fallback auth:', firebaseErr);
-          }
-        }
-
-        if (profile) {
-          localStorage.setItem('simulated_user_uid', profile.uid);
-        }
+        let profile: UserProfile | null = await dataService.findProfileByEmail(cleanAuthEmail);
 
         if (!profile) {
           // Log failed login
           await dataService.addSecurityAuditLog({
             userId: 'unregistered',
-            userEmail: authEmail,
+            userEmail: cleanAuthEmail,
             action: 'LOGIN_FAILURE',
-            details: `Failed authentication attempt for email: ${authEmail}`,
+            details: `Failed authentication attempt for email: ${cleanAuthEmail}`,
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
           });
-          throw new Error('User account not found. Please register to create your secure co-operative portal account!');
+          throw { code: 'auth/user-not-found', message: language === 'EN' ? 'No account found with this email. Please register first or ask Admin to add your account.' : 'මෙම විද්‍යුත් තැපෑලෙන් ගිණුමක් හමු නොවීය. කරුණාකර ලියාපදිංචි වන්න.' };
+        }
+
+        let passwordVerified = false;
+
+        if (profile.password && profile.password.trim() === cleanAuthPassword) {
+          passwordVerified = true;
+        }
+
+        if (!passwordVerified && firebaseActive && auth) {
+          try {
+            const userCredential = await signInWithEmailAndPassword(auth, cleanAuthEmail, cleanAuthPassword);
+            if (userCredential.user) {
+              passwordVerified = true;
+              if (!profile) {
+                profile = await dataService.getUserProfile(userCredential.user.uid);
+              }
+            }
+          } catch (firebaseErr: any) {
+            console.warn('Firebase native sign-in attempt warning:', firebaseErr);
+          }
+        }
+
+        if (!passwordVerified) {
+          throw { code: 'auth/wrong-password', message: language === 'EN' ? 'Incorrect email or password. Please try again.' : 'විද්‍යුත් තැපෑල හෝ මුරපදය වැරදියි. කරුණාකර නැවත උත්සාහ කරන්න.' };
+        }
+
+        if (profile) {
+          localStorage.setItem('simulated_user_uid', profile.uid);
         }
 
         // Account suspension guard

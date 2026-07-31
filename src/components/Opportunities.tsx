@@ -139,7 +139,7 @@ export default function Opportunities({ language }: OpportunitiesProps) {
                   </span>
                   <span className="flex items-center text-xs text-[#2D2D2A]/55 font-sans font-medium">
                     <Calendar className="h-3.5 w-3.5 mr-1 text-[#2D2D2A]/40" />
-                    {new Date(opp.createdAt).toLocaleDateString()}
+                    {opp.createdAt ? (isNaN(new Date(opp.createdAt).getTime()) ? 'N/A' : new Date(opp.createdAt).toLocaleDateString()) : 'N/A'}
                   </span>
                 </div>
 
