@@ -141,7 +141,12 @@ import {
   MachineryInquiry,
   MachineItem,
   AppNotification,
-  SecurityAuditLog
+  SecurityAuditLog,
+  Order,
+  ProductInquiry,
+  Wallet,
+  WithdrawalRequest,
+  ProductReview
 } from '../types';
 
 // ============================================================================
@@ -243,6 +248,11 @@ const SEED_MACHINERY_ITEMS: MachineItem[] = [];
 
 const SEED_NOTIFICATIONS: AppNotification[] = [];
 const SEED_SECURITY_LOGS: SecurityAuditLog[] = [];
+const SEED_ORDERS: Order[] = [];
+const SEED_PRODUCT_INQUIRIES: ProductInquiry[] = [];
+const SEED_WALLETS: Wallet[] = [];
+const SEED_WITHDRAWALS: WithdrawalRequest[] = [];
+const SEED_REVIEWS: ProductReview[] = [];
 
 // Local storage backing keys
 const LS_PRODUCTS = 'mush_products_v2';
@@ -259,6 +269,11 @@ const LS_ANNOUNCEMENTS = 'mush_announcements_v2';
 const LS_USERS = 'mush_users_v2';
 const LS_NOTIFICATIONS = 'mush_notifications_v2';
 const LS_SECURITY_LOGS = 'mush_security_logs_v2';
+const LS_ORDERS = 'mush_orders_v2';
+const LS_PRODUCT_INQUIRIES = 'mush_product_inquiries_v2';
+const LS_WALLETS = 'mush_wallets_v2';
+const LS_WITHDRAWALS = 'mush_withdrawals_v2';
+const LS_REVIEWS = 'mush_reviews_v2';
 
 // ============================================================================
 // STATE INITIALIZATION & HELPER METHODS
@@ -299,6 +314,11 @@ if (typeof window !== 'undefined') {
   loadStorageData(LS_MACHINERY_INQUIRIES, SEED_MACHINERY_INQUIRIES);
   loadStorageData(LS_NOTIFICATIONS, SEED_NOTIFICATIONS);
   loadStorageData(LS_SECURITY_LOGS, SEED_SECURITY_LOGS);
+  loadStorageData(LS_ORDERS, SEED_ORDERS);
+  loadStorageData(LS_PRODUCT_INQUIRIES, SEED_PRODUCT_INQUIRIES);
+  loadStorageData(LS_WALLETS, SEED_WALLETS);
+  loadStorageData(LS_WITHDRAWALS, SEED_WITHDRAWALS);
+  loadStorageData(LS_REVIEWS, SEED_REVIEWS);
   
   // Make sure seed users are stored
   try {
@@ -332,6 +352,14 @@ export const dataService = {
         querySnapshot.forEach((docSnap) => {
           list.push({ ...docSnap.data(), id: docSnap.id } as Product);
         });
+        // Merge in any localStorage-only products (saved when user wasn't Firebase-authenticated)
+        const localProducts = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
+        const firebaseIds = new Set(list.map(p => p.id));
+        for (const lp of localProducts) {
+          if (!firebaseIds.has(lp.id)) {
+            list.push(lp);
+          }
+        }
         // Real-world clean data: return Firestore contents directly if query succeeds
         const cleanedList = list.map((product) => {
           let imageUrl = product.imageUrl || '';
@@ -368,23 +396,40 @@ export const dataService = {
     const newProduct: Product = {
       ...product,
       id: 'prod_' + Math.random().toString(36).substr(2, 9),
+      approvalStatus: product.ownerType === 'partner' ? 'Pending Review' : 'Approved',
+      submittedAt: new Date().toISOString(),
       createdAt: new Date().toISOString()
     };
 
-    if (isFirebaseAvailable) {
+    if (isFirebaseAvailable && auth?.currentUser) {
       try {
         await setDoc(doc(db, 'products', newProduct.id), newProduct);
         const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
         saveStorageData(LS_PRODUCTS, [newProduct, ...local]);
-        return newProduct;
       } catch (e) {
-        handleServiceError('addProduct', e);
+        console.warn('Firebase addProduct error, falling back to localStorage:', e);
       }
     }
 
     const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
     const updated = [newProduct, ...local];
     saveStorageData(LS_PRODUCTS, updated);
+
+    // Notify Admin/Staff when partner submits new product
+    if (newProduct.ownerType === 'partner') {
+      try {
+        await this.addNotification({
+          userId: 'admin',
+          title: 'New Product Submitted for Review',
+          message: `Partner '${newProduct.supplierName}' submitted a new product '${newProduct.name}' for quality review.`,
+          type: 'info',
+          read: false
+        });
+      } catch (err) {
+        console.warn('Notification error on addProduct:', err);
+      }
+    }
+
     return newProduct;
   },
 
@@ -409,6 +454,62 @@ export const dataService = {
     const local = loadStorageData<Product>(LS_PRODUCTS, SEED_PRODUCTS);
     const updated = local.map((p) => (p.id === id ? { ...p, ...updates } : p));
     saveStorageData(LS_PRODUCTS, updated);
+  },
+
+  async reviewProduct(
+    id: string,
+    approvalStatus: Product['approvalStatus'],
+    rejectionReason?: string,
+    reviewerName?: string
+  ): Promise<void> {
+    const updates: Partial<Product> = {
+      approvalStatus,
+      rejectionReason: rejectionReason || '',
+      adminNotes: rejectionReason || '',
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: reviewerName || 'Co-op Administration'
+    };
+
+    await this.updateProduct(id, updates);
+
+    const products = await this.getProducts();
+    const prod = products.find((p) => p.id === id);
+    if (prod && (prod.supplierId || prod.ownerId)) {
+      const targetUserId = prod.supplierId || prod.ownerId || '';
+      let title = 'Product Status Updated';
+      let msg = `Your product '${prod.name}' status has been updated to '${approvalStatus}'.`;
+      let type: AppNotification['type'] = 'info';
+
+      if (approvalStatus === 'Approved') {
+        title = '🎉 Product Approved';
+        msg = `Congratulations! Your product '${prod.name}' has been approved and is now live on the Marketplace.`;
+        type = 'success';
+      } else if (approvalStatus === 'Rejected') {
+        title = '❌ Product Application Rejected';
+        msg = `Your product '${prod.name}' was rejected. Reason: ${rejectionReason || 'Does not meet co-op standards'}`;
+        type = 'alert';
+      } else if (approvalStatus === 'Changes Requested') {
+        title = '⚠️ Changes Requested for Product';
+        msg = `Action required for product '${prod.name}': ${rejectionReason || 'Please update listing details'}`;
+        type = 'alert';
+      } else if (approvalStatus === 'Suspended') {
+        title = '⛔ Product Suspended';
+        msg = `Your product listing '${prod.name}' has been suspended by administration. Reason: ${rejectionReason || 'Policy compliance issue'}`;
+        type = 'security';
+      }
+
+      try {
+        await this.addNotification({
+          userId: targetUserId,
+          title,
+          message: msg,
+          type,
+          read: false
+        });
+      } catch (e) {
+        console.warn('Notification error on reviewProduct:', e);
+      }
+    }
   },
 
   async deleteProduct(id: string): Promise<void> {
@@ -477,7 +578,7 @@ export const dataService = {
     return newMember;
   },
 
-  async updateMemberStatus(id: string, status: 'pending' | 'approved' | 'rejected'): Promise<void> {
+  async updateMemberStatus(id: string, status: 'Pending Verification' | 'Under Review' | 'Approved' | 'Rejected' | 'Suspended'): Promise<void> {
     if (isFirebaseAvailable && auth?.currentUser) {
       try {
         await updateDoc(doc(db, 'ecosystem_members', id), { status });
@@ -1505,5 +1606,474 @@ export const dataService = {
     const local = loadStorageData<SecurityAuditLog>(LS_SECURITY_LOGS, SEED_SECURITY_LOGS);
     saveStorageData(LS_SECURITY_LOGS, [newLog, ...local]);
     return newLog;
+  },
+
+  // --- PRODUCT INQUIRIES ---
+  async getProductInquiries(): Promise<ProductInquiry[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'product_inquiries'), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        const list: ProductInquiry[] = [];
+        snap.forEach(doc => list.push({ ...doc.data(), id: doc.id } as ProductInquiry));
+        return list;
+      } catch (e) {
+        console.warn('Firebase getProductInquiries failed, falling back:', e);
+      }
+    }
+    return loadStorageData<ProductInquiry>(LS_PRODUCT_INQUIRIES, SEED_PRODUCT_INQUIRIES)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  async addProductInquiry(inquiry: Omit<ProductInquiry, 'id' | 'createdAt'>): Promise<ProductInquiry> {
+    const newInquiry: ProductInquiry = {
+      ...inquiry,
+      id: 'pinq_' + Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString()
+    };
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, 'product_inquiries'), newInquiry);
+        newInquiry.id = docRef.id;
+        const local = loadStorageData<ProductInquiry>(LS_PRODUCT_INQUIRIES, SEED_PRODUCT_INQUIRIES);
+        saveStorageData(LS_PRODUCT_INQUIRIES, [newInquiry, ...local]);
+        return newInquiry;
+      } catch (e) {
+        console.warn('Firebase addProductInquiry error:', e);
+      }
+    }
+    const local = loadStorageData<ProductInquiry>(LS_PRODUCT_INQUIRIES, SEED_PRODUCT_INQUIRIES);
+    saveStorageData(LS_PRODUCT_INQUIRIES, [newInquiry, ...local]);
+    return newInquiry;
+  },
+
+  async updateProductInquiryStatus(id: string, status: ProductInquiry['status']): Promise<void> {
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'product_inquiries', id), { status });
+      } catch (e) {
+        console.warn('Firebase updateProductInquiryStatus error:', e);
+      }
+    }
+    const local = loadStorageData<ProductInquiry>(LS_PRODUCT_INQUIRIES, SEED_PRODUCT_INQUIRIES);
+    const updated = local.map(i => i.id === id ? { ...i, status } : i);
+    saveStorageData(LS_PRODUCT_INQUIRIES, updated);
+  },
+
+  // --- ORDERS ---
+  async getOrders(): Promise<Order[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const snap = await getDocs(collection(db, 'orders'));
+        const list: Order[] = [];
+        snap.forEach(docSnap => list.push({ ...docSnap.data(), id: docSnap.id } as Order));
+        const local = loadStorageData<Order>(LS_ORDERS, SEED_ORDERS);
+        const mergedMap = new Map<string, Order>();
+        [...list, ...local].forEach(o => mergedMap.set(o.id, o));
+        return Array.from(mergedMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } catch (e) {
+        console.warn('Firebase getOrders failed, falling back:', e);
+      }
+    }
+    return loadStorageData<Order>(LS_ORDERS, SEED_ORDERS);
+  },
+
+  async getOrdersForUser(currentUser: { uid: string; role: string; email?: string }): Promise<Order[]> {
+    const allOrders = await this.getOrders();
+    if (currentUser.role === 'admin' || currentUser.role === 'staff') {
+      return allOrders;
+    }
+    if (currentUser.role === 'partner') {
+      return allOrders.filter(o => o.ownerId === currentUser.uid);
+    }
+    if (currentUser.email) {
+      return allOrders.filter(o => o.customerInfo.email.toLowerCase() === currentUser.email!.toLowerCase());
+    }
+    return [];
+  },
+
+  async addOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<Order> {
+    const newOrder: Order = {
+      ...order,
+      id: 'ord_' + Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString(),
+      history: [{ status: order.status || 'Pending', timestamp: new Date().toISOString() }]
+    };
+
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, 'orders'), newOrder);
+        newOrder.id = docRef.id;
+      } catch (e) {
+        console.warn('Firebase addOrder error:', e);
+      }
+    }
+
+    const local = loadStorageData<Order>(LS_ORDERS, SEED_ORDERS);
+    saveStorageData(LS_ORDERS, [newOrder, ...local]);
+
+    // Dispatch Notifications
+    try {
+      if (newOrder.ownerType === 'partner') {
+        // Notify Partner
+        await this.addNotification({
+          userId: newOrder.ownerId,
+          title: `🎉 New Order Received! (#${newOrder.id.slice(0, 8)})`,
+          message: `New order for "${newOrder.productName}" (Qty: ${newOrder.quantity}). Total: Rs. ${newOrder.orderTotal.toLocaleString()}.`,
+          type: 'info',
+          read: false
+        });
+
+        // Notify Admin & Staff
+        await this.addNotification({
+          userId: 'admin',
+          title: `📦 New Partner Order (#${newOrder.id.slice(0, 8)})`,
+          message: `New customer order placed for partner product "${newOrder.productName}".`,
+          type: 'info',
+          read: false
+        });
+      }
+    } catch (notifErr) {
+      console.warn('addOrder notification error:', notifErr);
+    }
+
+    return newOrder;
+  },
+
+  async updateOrderStatus(
+    id: string, 
+    status: Order['status'], 
+    qualityCheck?: Order['qualityCheck'],
+    rejectionReason?: string,
+    currentUser?: { uid: string; role: string; fullName: string; status?: string }
+  ): Promise<void> {
+    const local = loadStorageData<Order>(LS_ORDERS, SEED_ORDERS);
+    const orderIndex = local.findIndex(o => o.id === id);
+    const existingOrder = orderIndex >= 0 ? local[orderIndex] : null;
+
+    // Security & Authorization Check
+    if (currentUser && currentUser.role === 'partner') {
+      if (currentUser.status !== 'Approved') {
+        throw new Error('Security Restriction: Partner account must be Approved to manage orders.');
+      }
+      if (existingOrder && existingOrder.ownerId !== currentUser.uid) {
+        throw new Error('Security Restriction: You can only update orders for your own products.');
+      }
+      if (status === 'Quality Approved') {
+        throw new Error('Security Restriction: Only Admin/Staff can approve quality checks.');
+      }
+    }
+
+    const updateData: Partial<Order> = { status };
+    if (qualityCheck) {
+      updateData.qualityCheck = qualityCheck;
+    }
+    if (rejectionReason !== undefined) {
+      updateData.rejectionReason = rejectionReason;
+    }
+    
+    // Maintain history log
+    if (existingOrder) {
+      const history = existingOrder.history || [];
+      history.push({ status, timestamp: new Date().toISOString() });
+      updateData.history = history;
+    }
+
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'orders', id), updateData);
+      } catch (e) {
+        console.warn('Firebase updateOrderStatus error:', e);
+      }
+    }
+
+    if (orderIndex >= 0) {
+      local[orderIndex] = { ...local[orderIndex], ...updateData };
+      saveStorageData(LS_ORDERS, local);
+      
+      // Update partner wallet on completed order
+      if (status === 'Completed' && local[orderIndex].ownerType === 'partner') {
+        await this.addFundsToWallet(local[orderIndex].ownerId, local[orderIndex].partnerEarnings);
+      }
+    }
+
+    // Trigger Automated Notifications for Workflow Steps
+    try {
+      const targetOwnerId = existingOrder ? existingOrder.ownerId : '';
+      const prodName = existingOrder ? existingOrder.productName : 'Product';
+
+      // 1. Notify Customer on status change
+      if (['Accepted', 'Preparing', 'Quality Approved', 'Dispatched', 'Delivered'].includes(status) && existingOrder) {
+        await this.addNotification({
+          userId: existingOrder.customerInfo.email || 'customer',
+          title: `📦 Order Status Update: ${status}`,
+          message: `Your order for "${prodName}" (#${id.slice(0, 8)}) status is now: ${status}.`,
+          type: 'info',
+          read: false
+        });
+      }
+
+      // 2. Notify Admin/Staff when Ready For Quality Check
+      if (status === 'Ready For Quality Check') {
+        await this.addNotification({
+          userId: 'admin',
+          title: `🔍 Order Ready For Quality Check (#${id.slice(0, 8)})`,
+          message: `Partner submitted order for "${prodName}" for Admin Quality Verification.`,
+          type: 'security',
+          read: false
+        });
+      }
+
+      // 3. Notify Partner on Quality Approval / Rejection
+      if (status === 'Quality Approved' && targetOwnerId) {
+        await this.addNotification({
+          userId: targetOwnerId,
+          title: `✅ Quality Check Approved! (#${id.slice(0, 8)})`,
+          message: `Admin approved quality check for "${prodName}". You can now proceed to Dispatch.`,
+          type: 'info',
+          read: false
+        });
+      } else if (rejectionReason && targetOwnerId) {
+        await this.addNotification({
+          userId: targetOwnerId,
+          title: `❌ Quality Check Rejected (#${id.slice(0, 8)})`,
+          message: `Admin rejected quality check for "${prodName}". Reason: "${rejectionReason}". Please rectify and resubmit.`,
+          type: 'security',
+          read: false
+        });
+      }
+    } catch (notifErr) {
+      console.warn('updateOrderStatus notification error:', notifErr);
+    }
+  },
+
+  // --- WALLETS ---
+  async getWallets(): Promise<Wallet[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const snap = await getDocs(collection(db, 'wallets'));
+        const list: Wallet[] = [];
+        snap.forEach(doc => list.push({ ...doc.data(), id: doc.id } as Wallet));
+        return list;
+      } catch (e) {
+        console.warn('Firebase getWallets failed:', e);
+      }
+    }
+    return loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+  },
+
+  async getWallet(partnerId: string): Promise<Wallet | null> {
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'wallets'), where('partnerId', '==', partnerId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          return { ...docSnap.data(), id: docSnap.id } as Wallet;
+        }
+      } catch (e) {
+        console.warn('Firebase getWallet failed:', e);
+      }
+    }
+    const local = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+    return local.find(w => w.partnerId === partnerId) || null;
+  },
+
+  async createWallet(partnerId: string, commissionRate: number = 0.05): Promise<Wallet> {
+    const existing = await this.getWallet(partnerId);
+    if (existing) return existing;
+    
+    const newWallet: Wallet = {
+      id: 'wal_' + Math.random().toString(36).substr(2, 9),
+      partnerId,
+      balance: 0,
+      pendingEarnings: 0,
+      availableBalance: 0,
+      commissionRate
+    };
+    
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, 'wallets'), newWallet);
+        newWallet.id = docRef.id;
+      } catch (e) {
+        console.warn('Firebase createWallet failed:', e);
+      }
+    }
+    const local = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+    saveStorageData(LS_WALLETS, [newWallet, ...local]);
+    return newWallet;
+  },
+
+  async addFundsToWallet(partnerId: string, amount: number): Promise<void> {
+    let wallet = await this.getWallet(partnerId);
+    if (!wallet) {
+      wallet = await this.createWallet(partnerId);
+    }
+    const newBalance = wallet.balance + amount;
+    const newAvailable = wallet.availableBalance + amount;
+    
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'wallets', wallet.id), { balance: newBalance, availableBalance: newAvailable });
+      } catch (e) {
+        console.warn('Firebase addFundsToWallet failed:', e);
+      }
+    }
+    const local = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+    const updated = local.map(w => w.id === wallet!.id ? { ...w, balance: newBalance, availableBalance: newAvailable } : w);
+    saveStorageData(LS_WALLETS, updated);
+  },
+
+  // --- WITHDRAWALS ---
+  async getWithdrawals(): Promise<WithdrawalRequest[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'withdrawals'), orderBy('requestedAt', 'desc'));
+        const snap = await getDocs(q);
+        const list: WithdrawalRequest[] = [];
+        snap.forEach(doc => list.push({ ...doc.data(), id: doc.id } as WithdrawalRequest));
+        return list;
+      } catch (e) {
+        console.warn('Firebase getWithdrawals failed:', e);
+      }
+    }
+    return loadStorageData<WithdrawalRequest>(LS_WITHDRAWALS, SEED_WITHDRAWALS)
+      .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+  },
+
+  async requestWithdrawal(partnerId: string, amount: number): Promise<WithdrawalRequest> {
+    const wallet = await this.getWallet(partnerId);
+    if (!wallet || wallet.availableBalance < amount) {
+      throw new Error("Insufficient available balance.");
+    }
+    
+    // Deduct from available balance, but keep in balance until approved
+    const newAvailable = wallet.availableBalance - amount;
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'wallets', wallet.id), { availableBalance: newAvailable });
+      } catch (e) {
+        console.warn('Firebase deduct wallet failed:', e);
+      }
+    }
+    const localW = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+    saveStorageData(LS_WALLETS, localW.map(w => w.id === wallet.id ? { ...w, availableBalance: newAvailable } : w));
+    
+    const req: WithdrawalRequest = {
+      id: 'wdr_' + Math.random().toString(36).substr(2, 9),
+      partnerId,
+      amount,
+      status: 'Pending',
+      requestedAt: new Date().toISOString()
+    };
+    
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, 'withdrawals'), req);
+        req.id = docRef.id;
+      } catch (e) {
+        console.warn('Firebase requestWithdrawal failed:', e);
+      }
+    }
+    const localReq = loadStorageData<WithdrawalRequest>(LS_WITHDRAWALS, SEED_WITHDRAWALS);
+    saveStorageData(LS_WITHDRAWALS, [req, ...localReq]);
+    return req;
+  },
+
+  async updateWithdrawalStatus(id: string, status: 'Approved' | 'Rejected'): Promise<void> {
+    const withdrawals = await this.getWithdrawals();
+    const req = withdrawals.find(w => w.id === id);
+    if (!req) return;
+    
+    if (status === 'Approved') {
+      // Deduct from total balance
+      const wallet = await this.getWallet(req.partnerId);
+      if (wallet) {
+        const newBalance = wallet.balance - req.amount;
+        if (isFirebaseAvailable) {
+          try { await updateDoc(doc(db, 'wallets', wallet.id), { balance: newBalance }); } catch(e) {}
+        }
+        const localW = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+        saveStorageData(LS_WALLETS, localW.map(w => w.id === wallet.id ? { ...w, balance: newBalance } : w));
+      }
+    } else if (status === 'Rejected') {
+      // Refund available balance
+      const wallet = await this.getWallet(req.partnerId);
+      if (wallet) {
+        const newAvailable = wallet.availableBalance + req.amount;
+        if (isFirebaseAvailable) {
+          try { await updateDoc(doc(db, 'wallets', wallet.id), { availableBalance: newAvailable }); } catch(e) {}
+        }
+        const localW = loadStorageData<Wallet>(LS_WALLETS, SEED_WALLETS);
+        saveStorageData(LS_WALLETS, localW.map(w => w.id === wallet.id ? { ...w, availableBalance: newAvailable } : w));
+      }
+    }
+    
+    const processedAt = new Date().toISOString();
+    if (isFirebaseAvailable) {
+      try {
+        await updateDoc(doc(db, 'withdrawals', id), { status, processedAt });
+      } catch (e) {
+        console.warn('Firebase updateWithdrawalStatus error:', e);
+      }
+    }
+    const localReq = loadStorageData<WithdrawalRequest>(LS_WITHDRAWALS, SEED_WITHDRAWALS);
+    saveStorageData(LS_WITHDRAWALS, localReq.map(w => w.id === id ? { ...w, status, processedAt } : w));
+  },
+
+  // --- REVIEWS ---
+  async getProductReviews(productId: string): Promise<ProductReview[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'product_reviews'), where('productId', '==', productId));
+        const snap = await getDocs(q);
+        const list: ProductReview[] = [];
+        snap.forEach(doc => list.push({ ...doc.data(), id: doc.id } as ProductReview));
+        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } catch (e) {
+        console.warn('Firebase getProductReviews failed:', e);
+      }
+    }
+    return loadStorageData<ProductReview>(LS_REVIEWS, SEED_REVIEWS)
+      .filter(r => r.productId === productId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  async getAllProductReviews(): Promise<ProductReview[]> {
+    if (isFirebaseAvailable) {
+      try {
+        const snap = await getDocs(collection(db, 'product_reviews'));
+        const list: ProductReview[] = [];
+        snap.forEach(doc => list.push({ ...doc.data(), id: doc.id } as ProductReview));
+        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } catch (e) {
+        console.warn('Firebase getAllProductReviews failed:', e);
+      }
+    }
+    return loadStorageData<ProductReview>(LS_REVIEWS, SEED_REVIEWS)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  async addProductReview(review: Omit<ProductReview, 'id' | 'createdAt'>): Promise<ProductReview> {
+    const newRev: ProductReview = {
+      ...review,
+      id: 'rev_' + Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString()
+    };
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, 'product_reviews'), newRev);
+        newRev.id = docRef.id;
+        const local = loadStorageData<ProductReview>(LS_REVIEWS, SEED_REVIEWS);
+        saveStorageData(LS_REVIEWS, [newRev, ...local]);
+        return newRev;
+      } catch (e) {
+        console.warn('Firebase addProductReview error:', e);
+      }
+    }
+    const local = loadStorageData<ProductReview>(LS_REVIEWS, SEED_REVIEWS);
+    saveStorageData(LS_REVIEWS, [newRev, ...local]);
+    return newRev;
   }
 };

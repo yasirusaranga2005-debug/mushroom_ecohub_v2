@@ -34,15 +34,29 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
   // Expanded View details state
   const [expandedProduct, setExpandedProduct] = useState<Product | null>(null);
 
-  // Inquiry form states
+  // Inquiry and Order form states
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [modalMode, setModalMode] = useState<'inquiry' | 'order' | null>(null);
+
   const [inquiryData, setInquiryData] = useState({
     buyerName: '',
+    company: '',
     phone: '',
     email: currentUserEmail || '',
+    country: '',
     requiredQuantity: '',
-    deliveryLocation: '',
     message: ''
+  });
+
+  const [orderData, setOrderData] = useState({
+    name: '',
+    email: currentUserEmail || '',
+    phone: '',
+    address: '',
+    country: '',
+    postalCode: '',
+    quantity: 1,
+    notes: ''
   });
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
   const [inquirySuccess, setInquirySuccess] = useState(false);
@@ -85,13 +99,32 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
 
   const handleOpenInquiry = (product: Product) => {
     setSelectedProduct(product);
+    setModalMode('inquiry');
     setInquiryData({
       buyerName: '',
+      company: '',
       phone: '',
       email: currentUserEmail || '',
+      country: '',
       requiredQuantity: '',
-      deliveryLocation: '',
       message: ''
+    });
+    setInquirySuccess(false);
+    setInquiryError('');
+  };
+
+  const handleOpenOrder = (product: Product) => {
+    setSelectedProduct(product);
+    setModalMode('order');
+    setOrderData({
+      name: '',
+      email: currentUserEmail || '',
+      phone: '',
+      address: '',
+      country: '',
+      postalCode: '',
+      quantity: 1,
+      notes: ''
     });
     setInquirySuccess(false);
     setInquiryError('');
@@ -102,11 +135,16 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
     setInquiryData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleOrderChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setOrderData((prev) => ({ ...prev, [name]: value }));
+  };
+
   const handleInquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
 
-    if (!inquiryData.buyerName || !inquiryData.phone || !inquiryData.email || !inquiryData.requiredQuantity || !inquiryData.deliveryLocation) {
+    if (!inquiryData.buyerName || !inquiryData.phone || !inquiryData.email || !inquiryData.requiredQuantity || !inquiryData.country) {
       setInquiryError(language === 'EN' ? 'Please fill in all required fields.' : 'කරුණාකර සියලුම අත්‍යවශ්‍ය ක්ෂේත්‍ර පුරවන්න.');
       return;
     }
@@ -115,18 +153,19 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
     setInquiryError('');
 
     try {
-      await dataService.addInquiry({
-        buyerName: inquiryData.buyerName,
-        phone: inquiryData.phone,
+      await dataService.addProductInquiry({
+        name: inquiryData.buyerName,
+        company: inquiryData.company,
         email: inquiryData.email,
+        phone: inquiryData.phone,
+        country: inquiryData.country,
+        quantity: inquiryData.requiredQuantity,
+        message: inquiryData.message,
         productId: selectedProduct.id,
         productName: selectedProduct.name,
-        requiredQuantity: inquiryData.requiredQuantity,
-        deliveryLocation: inquiryData.deliveryLocation,
-        message: inquiryData.message,
-        status: 'New',
-        supplierId: selectedProduct.supplierId,
-        buyerId: currentUserId
+        ownerId: selectedProduct.ownerId || selectedProduct.supplierId,
+        ownerType: selectedProduct.ownerType || 'partner',
+        status: 'Pending Inquiries'
       });
 
       setInquirySuccess(true);
@@ -138,7 +177,66 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
     }
   };
 
+  const handleOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    if (!orderData.name || !orderData.phone || !orderData.email || !orderData.address || !orderData.country || !orderData.postalCode || !orderData.quantity) {
+      setInquiryError(language === 'EN' ? 'Please fill in all required fields.' : 'කරුණාකර සියලුම අත්‍යවශ්‍ය ක්ෂේත්‍ර පුරවන්න.');
+      return;
+    }
+
+    setSubmittingInquiry(true);
+    setInquiryError('');
+
+    try {
+      const price = parseFloat(selectedProduct.priceRange.replace(/[^0-9.]/g, '')) || 0;
+      const orderTotal = price * Number(orderData.quantity);
+      const commissionRate = 0.05; 
+      const platformCommission = orderTotal * commissionRate;
+      const partnerEarnings = orderTotal - platformCommission;
+
+      await dataService.addOrder({
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        ownerId: selectedProduct.ownerId || selectedProduct.supplierId,
+        ownerType: selectedProduct.ownerType || 'partner',
+        customerInfo: {
+          name: orderData.name,
+          email: orderData.email,
+          phone: orderData.phone,
+          address: orderData.address,
+          district: selectedProduct.district || 'Colombo',
+          country: orderData.country,
+          postalCode: orderData.postalCode
+        },
+        quantity: Number(orderData.quantity),
+        unitPrice: price,
+        orderTotal,
+        platformCommission,
+        partnerEarnings,
+        paymentStatus: 'Cash on Delivery',
+        notes: orderData.notes,
+        status: 'Pending'
+      });
+
+      setInquirySuccess(true);
+    } catch (err) {
+      console.error(err);
+      setInquiryError(language === 'EN' ? 'Could not submit order. Please try again.' : 'ඇණවුම යොමු කිරීමට නොහැකි විය. නැවත උත්සාහ කරන්න.');
+    } finally {
+      setSubmittingInquiry(false);
+    }
+  };
+
   const filteredProducts = products.filter((p) => {
+    // Only products with approvalStatus === 'Approved' should be visible
+    if (p.ownerType === 'partner' && p.approvalStatus !== 'Approved') {
+      return false;
+    }
+    if (p.approvalStatus && p.approvalStatus !== 'Approved') {
+      return false;
+    }
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           p.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -308,26 +406,41 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-[#5A5A40]/10 flex items-center justify-between font-sans">
-                  <div>
-                    <span className="block text-[10px] text-[#2D2D2A]/50 font-bold uppercase tracking-wider">
-                      {language === 'EN' ? 'Est. Price' : 'ඇස්තමේන්තුගත මිල'}
-                    </span>
-                    <span className="text-[#8B4513] font-serif font-bold text-sm">
-                      {product.priceRange}
-                    </span>
+                <div className="pt-2 border-t border-[#5A5A40]/10 flex flex-col gap-2 font-sans">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="block text-[10px] text-[#2D2D2A]/50 font-bold uppercase tracking-wider">
+                        {language === 'EN' ? 'Est. Price' : 'ඇස්තමේන්තුගත මිල'}
+                      </span>
+                      <span className="text-[#8B4513] font-serif font-bold text-sm">
+                        {product.priceRange}
+                      </span>
+                    </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenInquiry(product);
-                    }}
-                    className="px-3.5 py-2 bg-[#8B4513] hover:bg-[#733A0F] text-white text-xs font-serif font-bold rounded-xl shadow-sm transition flex items-center space-x-1"
-                    id={`btn-inquire-${product.id}`}
-                  >
-                    <Send className="h-3 w-3 text-white/80" />
-                    <span>{language === 'EN' ? 'Inquire' : 'මිල විමසන්න'}</span>
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenInquiry(product);
+                      }}
+                      className="flex-1 px-3 py-2 bg-[#5A5A40] hover:bg-[#4E4E37] text-white text-xs font-serif font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1"
+                      id={`btn-inquire-${product.id}`}
+                    >
+                      <Send className="h-3 w-3 text-white/80" />
+                      <span>{language === 'EN' ? 'Inquire' : 'මිල විමසන්න'}</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenOrder(product);
+                      }}
+                      className="flex-1 px-3 py-2 bg-[#8B4513] hover:bg-[#733A0F] text-white text-xs font-serif font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1"
+                      id={`btn-order-${product.id}`}
+                    >
+                      <ShoppingCart className="h-3 w-3 text-white/80" />
+                      <span>{language === 'EN' ? 'Order' : 'ඇණවුම් කරන්න'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -335,21 +448,28 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
         </div>
       )}
 
-      {/* Buyer Inquiry Modal Popup */}
-      {selectedProduct && (
-        <div className="fixed inset-0 bg-[#2D2D2A]/60 flex items-center justify-center p-4 z-50 animate-fade-in" id="inquiry-modal">
-          <div className="bg-white border border-[#5A5A40]/15 rounded-[32px] max-w-lg w-full overflow-hidden shadow-2xl relative">
-            <div className="bg-[#5A5A40] text-white p-6 relative">
+      {/* Unified Inquiry & Order Modal Popup */}
+      {selectedProduct && modalMode && (
+        <div className="fixed inset-0 bg-[#2D2D2A]/60 flex items-center justify-center p-4 z-50 animate-fade-in" id="unified-modal">
+          <div className="bg-white border border-[#5A5A40]/15 rounded-[32px] max-w-lg w-full overflow-hidden shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="bg-[#5A5A40] text-white p-6 relative shrink-0">
               <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#F5F5F0_1.5px,transparent_1.5px)] [background-size:16px_16px]"></div>
-              <div className="relative z-10">
-                <h3 className="text-xl font-serif font-bold tracking-tight">
-                  {language === 'EN' ? 'Submit Product Inquiry' : 'නිෂ්පාදන මිල විමසීම'}
-                </h3>
-                <p className="text-[#F5F5F0]/85 text-xs mt-1 font-sans">
-                  {language === 'EN' 
-                    ? 'Your direct request will be visible immediately to the supplier.' 
-                    : 'ඔබේ ඉල්ලීම සෘජුවම අදාළ සැපයුම්කරු වෙත යොමු කරනු ලැබේ.'}
-                </p>
+              <div className="relative z-10 flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-serif font-bold tracking-tight">
+                    {language === 'EN' 
+                      ? (modalMode === 'order' ? 'Place an Order' : 'Submit Product Inquiry')
+                      : (modalMode === 'order' ? 'ඇණවුමක් කරන්න' : 'නිෂ්පාදන මිල විමසීම')}
+                  </h3>
+                  <p className="text-[#F5F5F0]/85 text-xs mt-1 font-sans">
+                    {language === 'EN' 
+                      ? 'Your request will be sent directly to the supplier.' 
+                      : 'ඔබේ ඉල්ලීම සෘජුවම සැපයුම්කරු වෙත යොමු කරනු ලැබේ.'}
+                  </p>
+                </div>
+                <button onClick={() => { setSelectedProduct(null); setModalMode(null); }} className="text-white/70 hover:text-white shrink-0 p-1">
+                  <X className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
@@ -359,16 +479,18 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                   <CheckCircle2 className="h-10 w-10 text-[#8B4513]" />
                 </div>
                 <h4 className="text-xl font-serif font-bold text-[#2D2D2A]">
-                  {language === 'EN' ? 'Inquiry Submitted!' : 'විමසීම සාර්ථකව යොමු කරන ලදී!'}
+                  {language === 'EN' 
+                    ? (modalMode === 'order' ? 'Order Submitted!' : 'Inquiry Submitted!') 
+                    : (modalMode === 'order' ? 'ඇණවුම යොමු කරන ලදී!' : 'විමසීම යොමු කරන ලදී!')}
                 </h4>
                 <p className="text-[#2D2D2A]/70 text-sm">
                   {language === 'EN'
-                    ? `Your inquiry for "${selectedProduct.name}" has been sent to ${selectedProduct.supplierName}. They will contact you shortly.`
-                    : `ඔබේ විමසීම සාර්ථකව සපයන්නා වෙත ලැබී ඇත. ඔවුන් ළඟදීම ඔබව සම්බන්ධ කර ගනු ඇත.`}
+                    ? `Your ${modalMode} for "${selectedProduct.name}" has been sent to ${selectedProduct.supplierName}.`
+                    : `ඔබේ ${modalMode === 'order' ? 'ඇණවුම' : 'විමසීම'} සාර්ථකව සපයන්නා වෙත ලැබී ඇත.`}
                 </p>
                 <div className="pt-4">
                   <button
-                    onClick={() => setSelectedProduct(null)}
+                    onClick={() => { setSelectedProduct(null); setModalMode(null); }}
                     className="w-full py-2.5 bg-[#5A5A40] hover:bg-[#4E4E37] text-white text-sm font-serif font-bold rounded-xl"
                   >
                     {language === 'EN' ? 'Close Window' : 'වසා දමන්න'}
@@ -376,7 +498,7 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleInquirySubmit} className="p-6 space-y-4 font-sans">
+              <form onSubmit={modalMode === 'order' ? handleOrderSubmit : handleInquirySubmit} className="p-6 space-y-4 font-sans">
                 {inquiryError && (
                   <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-lg flex items-start space-x-2 text-red-800 text-xs">
                     <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
@@ -385,122 +507,147 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                 )}
 
                 {/* Selected Product info */}
-                <div className="bg-[#F5F5F0] border border-[#5A5A40]/10 p-3 rounded-xl">
-                  <span className="block text-[10px] uppercase font-serif font-bold text-[#2D2D2A]/60 tracking-wider">
-                    {language === 'EN' ? 'Inquiring Product' : 'විමසන නිෂ්පාදනය'}
-                  </span>
-                  <span className="block font-serif font-bold text-[#2D2D2A] text-sm">
-                    {selectedProduct.name}
-                  </span>
-                  <span className="block text-xs text-[#2D2D2A]/70 font-sans">
-                    {language === 'EN' ? 'Supplier: ' : 'සපයන්නා: '} {selectedProduct.supplierName} ({selectedProduct.district})
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Buyer Name */}
+                <div className="bg-[#F5F5F0] border border-[#5A5A40]/10 p-3 rounded-xl flex justify-between items-center">
                   <div>
-                    <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                      {language === 'EN' ? 'Your Name' : 'ඔබගේ නම'} <span className="text-[#8B4513] font-sans">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="buyerName"
-                      required
-                      value={inquiryData.buyerName}
-                      onChange={handleInquiryChange}
-                      placeholder="e.g. Saman Kumara"
-                      className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                    />
+                    <span className="block text-[10px] uppercase font-serif font-bold text-[#2D2D2A]/60 tracking-wider">
+                      {language === 'EN' ? 'Product' : 'නිෂ්පාදනය'}
+                    </span>
+                    <span className="block font-serif font-bold text-[#2D2D2A] text-sm">
+                      {selectedProduct.name}
+                    </span>
+                    <span className="block text-xs text-[#2D2D2A]/70 font-sans">
+                      {language === 'EN' ? 'Supplier: ' : 'සපයන්නා: '} {selectedProduct.supplierName}
+                    </span>
                   </div>
-
-                  {/* Phone */}
-                  <div>
-                    <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                      {language === 'EN' ? 'Phone Number' : 'දුරකථන අංකය'} <span className="text-[#8B4513] font-sans">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      required
-                      value={inquiryData.phone}
-                      onChange={handleInquiryChange}
-                      placeholder="e.g. 0771234567"
-                      className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                    />
+                  <div className="text-right">
+                    <span className="block text-[10px] uppercase font-serif font-bold text-[#2D2D2A]/60 tracking-wider">
+                      {language === 'EN' ? 'Price' : 'මිල'}
+                    </span>
+                    <span className="block text-[#8B4513] font-serif font-bold text-sm">
+                      {selectedProduct.priceRange}
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Email */}
-                  <div>
-                    <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                      {language === 'EN' ? 'Email Address' : 'විද්‍යුත් තැපෑල'} <span className="text-[#8B4513] font-sans">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      required
-                      value={inquiryData.email}
-                      onChange={handleInquiryChange}
-                      placeholder="e.g. buyer@gmail.com"
-                      className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                    />
-                  </div>
+                {modalMode === 'inquiry' && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Your Name' : 'ඔබගේ නම'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="buyerName" required value={inquiryData.buyerName} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Company (Optional)' : 'ආයතනය (විකල්ප)'}
+                        </label>
+                        <input type="text" name="company" value={inquiryData.company} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Email' : 'විද්‍යුත් තැපෑල'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="email" name="email" required value={inquiryData.email} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Phone' : 'දුරකථනය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="tel" name="phone" required value={inquiryData.phone} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Country/Location' : 'රට/ස්ථානය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="country" required value={inquiryData.country} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Required Qty' : 'අවශ්‍ය ප්‍රමාණය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="requiredQuantity" required value={inquiryData.requiredQuantity} onChange={handleInquiryChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                        {language === 'EN' ? 'Message' : 'පණිවිඩය'}
+                      </label>
+                      <textarea name="message" value={inquiryData.message} onChange={handleInquiryChange} rows={3} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm"></textarea>
+                    </div>
+                  </>
+                )}
 
-                  {/* Required Quantity */}
-                  <div>
-                    <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                      {language === 'EN' ? 'Required Quantity (e.g. 100kg)' : 'අවශ්‍ය ප්‍රමාණය'} <span className="text-[#8B4513] font-sans">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="requiredQuantity"
-                      required
-                      value={inquiryData.requiredQuantity}
-                      onChange={handleInquiryChange}
-                      placeholder="e.g. 50kg weekly"
-                      className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                    />
-                  </div>
-                </div>
-
-                {/* Delivery Location */}
-                <div>
-                  <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                    {language === 'EN' ? 'Delivery Location / City' : 'ලැබිය යුතු ස්ථානය / නගරය'} <span className="text-[#8B4513] font-sans">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="deliveryLocation"
-                    required
-                    value={inquiryData.deliveryLocation}
-                    onChange={handleInquiryChange}
-                    placeholder="e.g. Pettah Warehouse, Colombo"
-                    className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                  />
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
-                    {language === 'EN' ? 'Message / Special Instructions' : 'විශේෂ පණිවිඩය'}
-                  </label>
-                  <textarea
-                    name="message"
-                    value={inquiryData.message}
-                    onChange={handleInquiryChange}
-                    rows={3}
-                    placeholder={language === 'EN' ? 'State payment preferences, timing or queries...' : 'ගෙවීම් ක්‍රම සහ කාලසීමාවන් පිළිබඳ සඳහන් කරන්න...'}
-                    className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm text-[#2D2D2A] focus:border-[#8B4513] focus:ring-2 focus:ring-[#8B4513]/10 outline-none bg-white transition"
-                  ></textarea>
-                </div>
+                {modalMode === 'order' && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Full Name' : 'සම්පූර්ණ නම'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="name" required value={orderData.name} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Phone' : 'දුරකථනය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="tel" name="phone" required value={orderData.phone} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Email Address' : 'විද්‍යුත් තැපෑල'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="email" name="email" required value={orderData.email} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Delivery Address' : 'බෙදාහැරීමේ ලිපිනය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="address" required value={orderData.address} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Country' : 'රට'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="country" required value={orderData.country} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                      <div className="col-span-1">
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Postal Code' : 'තැපැල් කේතය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="text" name="postalCode" required value={orderData.postalCode} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                          {language === 'EN' ? 'Quantity' : 'ප්‍රමාණය'} <span className="text-[#8B4513] font-sans">*</span>
+                        </label>
+                        <input type="number" min="1" name="quantity" required value={orderData.quantity} onChange={handleOrderChange} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[#2D2D2A] font-serif font-bold text-xs mb-1">
+                        {language === 'EN' ? 'Order Notes' : 'සටහන්'}
+                      </label>
+                      <textarea name="notes" value={orderData.notes} onChange={handleOrderChange} rows={2} className="w-full px-3 py-2 border border-[#5A5A40]/25 rounded-lg text-sm"></textarea>
+                    </div>
+                  </>
+                )}
 
                 {/* Buttons */}
                 <div className="flex space-x-3 pt-3 border-t border-[#5A5A40]/10">
                   <button
                     type="button"
-                    onClick={() => setSelectedProduct(null)}
+                    onClick={() => { setSelectedProduct(null); setModalMode(null); }}
                     className="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-serif font-bold rounded-xl transition"
                   >
                     {language === 'EN' ? 'Cancel' : 'අවලංගු කරන්න'}
@@ -509,14 +656,13 @@ export default function Marketplace({ language, currentUserEmail, currentUserId 
                     type="submit"
                     disabled={submittingInquiry}
                     className="flex-1 py-2.5 bg-[#8B4513] hover:bg-[#733A0F] disabled:bg-[#8B4513]/40 text-white text-sm font-serif font-bold rounded-xl transition flex items-center justify-center space-x-1"
-                    id="btn-submit-inquiry"
                   >
                     {submittingInquiry ? (
                       <span>{language === 'EN' ? 'Sending...' : 'යවමින්...'}</span>
                     ) : (
                       <>
-                        <Send className="h-3.5 w-3.5 text-white/80" />
-                        <span>{language === 'EN' ? 'Send Inquiry' : 'විමසීම යොමු කරන්න'}</span>
+                        {modalMode === 'order' ? <ShoppingCart className="h-3.5 w-3.5 text-white/80" /> : <Send className="h-3.5 w-3.5 text-white/80" />}
+                        <span>{language === 'EN' ? (modalMode === 'order' ? 'Confirm Order' : 'Send Inquiry') : (modalMode === 'order' ? 'ඇණවුම තහවුරු කරන්න' : 'විමසීම යොමු කරන්න')}</span>
                       </>
                     )}
                   </button>

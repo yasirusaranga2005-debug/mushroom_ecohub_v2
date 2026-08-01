@@ -27,6 +27,9 @@ import {
   Globe,
   MapPin,
   Award,
+  Eye,
+  Package,
+  Truck,
   Activity,
   CheckCircle2,
   Languages,
@@ -53,7 +56,8 @@ import {
   UserRole,
   MachineryInquiry,
   SecurityAuditLog,
-  AppNotification
+  AppNotification,
+  Order
 } from '../types';
 import { dataService } from '../lib/dataService';
 import { sendAdminCreatedUserEmail, sendTrainingResponseEmail } from '../lib/emailService';
@@ -202,6 +206,55 @@ export default function Dashboard({
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [machineryInquiries, setMachineryInquiries] = useState<MachineryInquiry[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // Product Review States
+  const [productReviewFilter, setProductReviewFilter] = useState<'All' | 'Pending Review' | 'Changes Requested' | 'Approved' | 'Rejected' | 'Suspended'>('Pending Review');
+  const [selectedProductForView, setSelectedProductForView] = useState<Product | null>(null);
+  const [reviewActionModal, setReviewActionModal] = useState<{
+    isOpen: boolean;
+    product: Product | null;
+    action: 'Approve' | 'Reject' | 'Changes Requested' | 'Suspend';
+    presetReason: string;
+    customNotes: string;
+  }>({
+    isOpen: false,
+    product: null,
+    action: 'Approve',
+    presetReason: 'Poor quality images',
+    customNotes: ''
+  });
+
+  // Order Management States
+  const [orderFilter, setOrderFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready For Quality Check' | 'Quality Approved' | 'Dispatched' | 'Delivered' | 'Completed'>('All');
+  const [selectedOrderForView, setSelectedOrderForView] = useState<Order | null>(null);
+  const [qualityCheckModal, setQualityCheckModal] = useState<{
+    isOpen: boolean;
+    order: Order | null;
+    batchNumber: string;
+    mfgDate: string;
+    expDate: string;
+    notes: string;
+  }>({
+    isOpen: false,
+    order: null,
+    batchNumber: '',
+    mfgDate: new Date().toISOString().split('T')[0],
+    expDate: '',
+    notes: ''
+  });
+
+  const [adminQualityReviewModal, setAdminQualityReviewModal] = useState<{
+    isOpen: boolean;
+    order: Order | null;
+    action: 'Approve' | 'Reject';
+    reason: string;
+  }>({
+    isOpen: false,
+    order: null,
+    action: 'Approve',
+    reason: ''
+  });
   const [securityLogs, setSecurityLogs] = useState<SecurityAuditLog[]>([]);
 
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -404,7 +457,7 @@ export default function Dashboard({
         district: adminUserForm.district,
         city: adminUserForm.district,
         password: adminUserForm.password,
-        status: 'approved',
+        status: 'Approved',
         bio: `${adminUserForm.role.toUpperCase()} registered by Co-operative Administrator.`,
         createdAt: new Date().toISOString()
       };
@@ -424,7 +477,7 @@ export default function Dashboard({
         interestedArea: 'System Operations',
         monthlyCapacity: 'N/A',
         message: 'Account created by Administrator.',
-        status: 'approved'
+        status: 'Approved'
       });
 
       // Send Welcome / Temp Password Email via EmailJS
@@ -530,7 +583,8 @@ export default function Dashboard({
         oaList,
         cList,
         uList,
-        macInqList
+        macInqList,
+        ordersList
       ] = await Promise.all([
         dataService.getMembers(),
         dataService.getProducts(),
@@ -541,7 +595,8 @@ export default function Dashboard({
         dataService.getOpportunityApplications(),
         dataService.getContactMessages(),
         dataService.getAllUserProfiles ? dataService.getAllUserProfiles() : Promise.resolve([]),
-        dataService.getMachineryInquiries()
+        dataService.getMachineryInquiries(),
+        dataService.getOrdersForUser(currentUser)
       ]);
 
       setMembers(mList);
@@ -554,6 +609,7 @@ export default function Dashboard({
       setContactMessages(cList);
       setUserProfiles(uList || []);
       setMachineryInquiries(macInqList);
+      setOrders(ordersList || []);
 
       if (currentUser.role === 'admin') {
         try {
@@ -684,16 +740,44 @@ export default function Dashboard({
       };
 
       if (editingProduct) {
-        await dataService.updateProduct(editingProduct.id, payload);
+        const isPartnerProd = editingProduct.ownerType === 'partner' || currentUser.role === 'partner';
+        const updatePayload: Partial<Product> = {
+          ...payload,
+          ...(isPartnerProd ? {
+            approvalStatus: 'Pending Review',
+            submittedAt: new Date().toISOString()
+          } : {})
+        };
+
+        await dataService.updateProduct(editingProduct.id, updatePayload);
+
+        if (isPartnerProd) {
+          try {
+            await dataService.addNotification({
+              userId: 'admin',
+              title: 'Product Resubmitted for Review',
+              message: `Partner '${currentUser.fullName}' resubmitted product '${productForm.name}' for quality review.`,
+              type: 'info',
+              read: false
+            });
+          } catch (err) {
+            console.warn('Resubmission notification error:', err);
+          }
+        }
+
         setFeedback({
           type: 'success',
-          message: language === 'EN' ? 'Product updated successfully.' : 'නිෂ්පාදන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී.'
+          message: isPartnerProd 
+            ? (language === 'EN' ? 'Product resubmitted for review successfully.' : 'නිෂ්පාදනය නැවත සත්‍යාපනය සඳහා යොමු කරන ලදී.')
+            : (language === 'EN' ? 'Product updated successfully.' : 'නිෂ්පාදන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී.')
         });
       } else {
         await dataService.addProduct({
           ...payload,
           supplierName: currentUser.fullName,
-          supplierId: currentUser.uid
+          supplierId: currentUser.uid,
+          ownerId: currentUser.uid,
+          ownerType: (['admin', 'staff'].includes(currentUser.role) ? 'admin' : 'partner') as 'admin' | 'partner'
         });
         setFeedback({
           type: 'success',
@@ -715,6 +799,68 @@ export default function Dashboard({
         images: [],
         status: 'Available'
       });
+      refreshAllData();
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({
+        type: 'error',
+        message: parseServiceError(err)
+      });
+    }
+  };
+
+  const handleConfirmReviewAction = async () => {
+    if (!reviewActionModal.product) return;
+    const prod = reviewActionModal.product;
+    const action = reviewActionModal.action;
+    
+    let finalReason = '';
+    if (action === 'Reject' || action === 'Changes Requested' || action === 'Suspend') {
+      if (reviewActionModal.presetReason === 'Other (Custom)') {
+        finalReason = reviewActionModal.customNotes.trim() || 'Additional details required.';
+      } else {
+        finalReason = reviewActionModal.presetReason + (reviewActionModal.customNotes.trim() ? `: ${reviewActionModal.customNotes.trim()}` : '');
+      }
+    }
+
+    let targetStatus: Product['approvalStatus'] = 'Approved';
+    if (action === 'Reject') targetStatus = 'Rejected';
+    if (action === 'Changes Requested') targetStatus = 'Changes Requested';
+    if (action === 'Suspend') targetStatus = 'Suspended';
+
+    try {
+      await dataService.reviewProduct(prod.id, targetStatus, finalReason, currentUser.fullName);
+      setFeedback({
+        type: 'success',
+        message: `Product '${prod.name}' ${action.toLowerCase()} decision recorded successfully.`
+      });
+      setReviewActionModal({ isOpen: false, product: null, action: 'Approve', presetReason: 'Poor quality images', customNotes: '' });
+      refreshAllData();
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({
+        type: 'error',
+        message: parseServiceError(err)
+      });
+    }
+  };
+
+  const handleUpdateOrderStatus = async (
+    id: string,
+    newStatus: Order['status'],
+    qualityCheck?: Order['qualityCheck'],
+    rejectionReason?: string
+  ) => {
+    try {
+      await dataService.updateOrderStatus(id, newStatus, qualityCheck, rejectionReason, currentUser);
+      setFeedback({
+        type: 'success',
+        message: language === 'EN'
+          ? `Order status updated to "${newStatus}".`
+          : `ඇණවුම් තත්ත්වය "${newStatus}" ලෙස යාවත්කාලීන කරන ලදී.`
+      });
+      setQualityCheckModal({ isOpen: false, order: null, batchNumber: '', mfgDate: '', expDate: '', notes: '' });
+      setAdminQualityReviewModal({ isOpen: false, order: null, action: 'Approve', reason: '' });
       refreshAllData();
     } catch (err: any) {
       console.error(err);
@@ -958,7 +1104,7 @@ export default function Dashboard({
   };
 
   // Status updates
-  const handleMemberStatus = async (id: string, status: 'approved' | 'rejected') => {
+  const handleMemberStatus = async (id: string, status: 'Approved' | 'Rejected') => {
     try {
       await dataService.updateMemberStatus(id, status);
       setFeedback({
@@ -1142,7 +1288,7 @@ export default function Dashboard({
                         {currentUser.role}
                       </span>
                       <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${
-                        currentUser.status === 'approved' ? 'bg-emerald-400' : 'bg-amber-400'
+                        currentUser.status === 'Approved' ? 'bg-emerald-400' : 'bg-amber-400'
                       }`}></span>
                     </div>
                   </div>
@@ -1182,6 +1328,8 @@ export default function Dashboard({
                       { id: 'user_control', icon: <Shield className="h-4 w-4" />, en: 'User Control Panel', si: 'පරිශීලක පාලනය' },
                       { id: 'inquiries', icon: <Inbox className="h-4 w-4" />, en: 'Buyer Inquiries', si: 'මිල විමසීම්' },
                       { id: 'machinery_inquiries', icon: <Wrench className="h-4 w-4" />, en: 'Machinery Requests', si: 'යන්ත්‍ර ඉල්ලීම්' },
+                      { id: 'product_reviews', icon: <CheckSquare className="h-4 w-4" />, en: 'Product Approvals', si: 'නිෂ්පාදන අනුමැතිය' },
+                      { id: 'orders', icon: <Package className="h-4 w-4" />, en: 'All Customer Orders', si: 'සියලුම ඇණවුම්' },
                       { id: 'products', icon: <ShoppingBag className="h-4 w-4" />, en: 'All Products', si: 'සියලුම නිෂ්පාදන' },
                       { id: 'training_reqs', icon: <GraduationCap className="h-4 w-4" />, en: 'Training Requests', si: 'පුහුණු ඉල්ලීම්' },
                       { id: 'opportunities', icon: <Briefcase className="h-4 w-4" />, en: 'Notice Board', si: 'දැන්වීම් පුවරුව' },
@@ -1292,6 +1440,7 @@ export default function Dashboard({
                       </span>
                     </div>
                     {[
+                      { id: 'orders', icon: <Package className="h-4 w-4" />, en: 'My Product Orders', si: 'මගේ ඇණවුම්' },
                       { id: 'machinery_inquiries', icon: <Wrench className="h-4 w-4" />, en: 'Customer Inquiries', si: 'පාරිභෝගික විමසීම්' },
                       { id: 'products', icon: <ShoppingBag className="h-4 w-4" />, en: 'Equipment Catalog', si: 'උපකරණ නාමාවලිය' },
                       { id: 'opportunities', icon: <Briefcase className="h-4 w-4" />, en: 'B2B Opportunities', si: 'B2B අවස්ථා' },
@@ -1320,6 +1469,8 @@ export default function Dashboard({
                     </div>
                     {[
                       { id: 'members', icon: <Users className="h-4 w-4" />, en: 'Member Verification', si: 'සාමාජික සත්‍යාපනය' },
+                      { id: 'product_reviews', icon: <CheckSquare className="h-4 w-4" />, en: 'Product Approvals', si: 'නිෂ්පාදන අනුමැතිය' },
+                      { id: 'orders', icon: <Package className="h-4 w-4" />, en: 'All Customer Orders', si: 'සියලුම ඇණවුම්' },
                       { id: 'products', icon: <ShoppingBag className="h-4 w-4" />, en: 'Product Management', si: 'නිෂ්පාදන කළමනාකරණය' },
                       { id: 'inquiries', icon: <Inbox className="h-4 w-4" />, en: 'Buyer Inquiries', si: 'මිල විමසීම්' },
                       { id: 'machinery_inquiries', icon: <Wrench className="h-4 w-4" />, en: 'Machinery Requests', si: 'යන්ත්‍ර ඉල්ලීම්' },
@@ -1369,18 +1520,18 @@ export default function Dashboard({
           ) : (
             <>
               {/* Pending Approval / Verification Status Banner */}
-              {(currentUser.status === 'pending' || currentUser.status === 'rejected') && (
+              {(currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review' || currentUser.status === 'Rejected') && (
                 <div className={`p-6 rounded-[28px] border ${
-                  currentUser.status === 'pending' 
+                  currentUser.status === 'Pending Verification' 
                     ? 'bg-amber-50/90 border-amber-200/80 text-stone-800' 
                     : 'bg-red-50/90 border-red-200/80 text-stone-800'
                 } shadow-xs mb-6 space-y-4 animate-fade-in`} id="pending-approval-banner">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-start space-x-3.5">
                       <div className={`p-3 rounded-2xl ${
-                        currentUser.status === 'pending' ? 'bg-amber-500/10 text-amber-700' : 'bg-red-500/10 text-red-700'
+                        (currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review') ? 'bg-amber-500/10 text-amber-700' : 'bg-red-500/10 text-red-700'
                       } shrink-0`}>
-                        {currentUser.status === 'pending' ? (
+                        {(currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review') ? (
                           <Clock className="h-6 w-6" />
                         ) : (
                           <AlertTriangle className="h-6 w-6" />
@@ -1388,14 +1539,14 @@ export default function Dashboard({
                       </div>
                       <div>
                         <h3 className="font-serif font-bold text-base text-stone-900 leading-tight">
-                          {currentUser.status === 'pending' ? (
+                          {(currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review') ? (
                             language === 'EN' ? 'Account Verification Pending Approval' : 'ගිණුම සත්‍යාපනය කිරීම සඳහා අනුමැතිය අපේක්ෂාවෙන්'
                           ) : (
                             language === 'EN' ? 'Account Verification Declined' : 'ගිණුම් සත්‍යාපනය ප්‍රතික්ෂේප කර ඇත'
                           )}
                         </h3>
                         <p className="text-xs text-stone-600 font-sans mt-1 max-w-2xl leading-relaxed">
-                          {currentUser.status === 'pending' ? (
+                          {(currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review') ? (
                             language === 'EN' 
                               ? `Welcome, ${currentUser.fullName}! Your registration as a ${currentUser.role} is currently being reviewed by our Co-operative Administration to verify regional crop capacities.`
                               : `සාදරයෙන් පිළිගනිමු, ${currentUser.fullName}! ඔබගේ ${currentUser.role} ලියාපදිංචිය, ප්‍රාදේශීය වගා ධාරිතාවයන් සත්‍යාපනය කිරීම සඳහා අපගේ සමුපකාර පරිපාලනය විසින් සමාලෝචනය කරමින් පවතී.`
@@ -1425,7 +1576,7 @@ export default function Dashboard({
                   </div>
 
                   {/* Verification Progress Stepper */}
-                  {currentUser.status === 'pending' && (
+                  {(currentUser.status === 'Pending Verification' || currentUser.status === 'Under Review') && (
                     <div className="pt-4 border-t border-amber-200/40">
                       <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800/80 mb-4">
                         {language === 'EN' ? 'Verification Progress' : 'සත්‍යාපන ප්‍රගතිය'}
@@ -2054,9 +2205,9 @@ export default function Dashboard({
                           </p>
 
                           <div className="flex gap-2 justify-end">
-                            {m.status !== 'approved' && (
+                            {m.status !== 'Approved' && (
                               <button
-                                onClick={() => handleMemberStatus(m.id, 'approved')}
+                                onClick={() => handleMemberStatus(m.id, 'Approved')}
                                 className="px-3 py-1.5 bg-[#5A5A40] hover:bg-[#4E4E37] text-white rounded-lg text-xs font-serif font-bold flex items-center space-x-1"
                               >
                                 <Check className="h-3.5 w-3.5" />
@@ -2065,7 +2216,7 @@ export default function Dashboard({
                             )}
                             {m.status !== 'rejected' && (
                               <button
-                                onClick={() => handleMemberStatus(m.id, 'rejected')}
+                                onClick={() => handleMemberStatus(m.id, 'Rejected')}
                                 className="px-3 py-1.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center space-x-1"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -2246,6 +2397,538 @@ export default function Dashboard({
                 </div>
               )}
 
+                            {/* PRODUCT REVIEWS & APPROVALS TAB (ADMIN / STAFF) */}
+              {activeTab === 'product_reviews' && ['admin', 'staff'].includes(currentUser.role) && (
+                <div className="space-y-6 animate-fade-in" id="tab-product-reviews">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
+                        <CheckSquare className="h-5 w-5 text-amber-700" />
+                        {language === 'EN' ? 'Partner Product Review & Approvals' : 'හවුල්කාර නිෂ්පාදන පරීක්ෂාව සහ අනුමැතිය'}
+                      </h3>
+                      <p className="text-xs text-stone-500 font-sans mt-1">
+                        {language === 'EN' 
+                          ? 'Review product listings submitted by partners before publishing to the Marketplace.'
+                          : 'වෙළඳපොළට එක් කිරීමට පෙර හවුල්කරුවන් විසින් ඉදිරිපත් කළ නිෂ්පාදන පරීක්ෂා කර අනුමත කරන්න.'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={refreshAllData}
+                      className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shrink-0 cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>{language === 'EN' ? 'Refresh' : 'නැවුම් කරන්න'}</span>
+                    </button>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                    {[
+                      { id: 'Pending Review', labelEN: 'Pending Review', labelSI: 'සමාලෝචනය වෙමින්', count: products.filter(p => p.ownerType === 'partner' && (p.approvalStatus === 'Pending Review' || p.approvalStatus === 'Draft' || !p.approvalStatus)).length, color: 'bg-amber-100 text-amber-900 border-amber-300' },
+                      { id: 'Changes Requested', labelEN: 'Changes Requested', labelSI: 'වෙනස්කම් ඉල්ලා ඇත', count: products.filter(p => p.ownerType === 'partner' && p.approvalStatus === 'Changes Requested').length, color: 'bg-orange-100 text-orange-900 border-orange-300' },
+                      { id: 'Approved', labelEN: 'Approved', labelSI: 'අනුමතයි', count: products.filter(p => p.ownerType === 'partner' && p.approvalStatus === 'Approved').length, color: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
+                      { id: 'Rejected', labelEN: 'Rejected', labelSI: 'ප්‍රතික්ෂේපිතයි', count: products.filter(p => p.ownerType === 'partner' && p.approvalStatus === 'Rejected').length, color: 'bg-red-100 text-red-900 border-red-300' },
+                      { id: 'Suspended', labelEN: 'Suspended', labelSI: 'අත්හිටුවන ලද', count: products.filter(p => p.ownerType === 'partner' && p.approvalStatus === 'Suspended').length, color: 'bg-rose-100 text-rose-900 border-rose-300' },
+                      { id: 'All', labelEN: 'All Partner Listings', labelSI: 'සියල්ල', count: products.filter(p => p.ownerType === 'partner').length, color: 'bg-stone-100 text-stone-900 border-stone-300' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setProductReviewFilter(f.id as any)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center space-x-2 border shrink-0 cursor-pointer ${
+                          productReviewFilter === f.id
+                            ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
+                            : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                        }`}
+                      >
+                        <span>{language === 'EN' ? f.labelEN : f.labelSI}</span>
+                        <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-black ${f.color}`}>
+                          {f.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Review Cards Grid */}
+                  {(() => {
+                    const filteredList = products.filter(p => {
+                      if (p.ownerType !== 'partner') return false;
+                      if (productReviewFilter === 'All') return true;
+                      if (productReviewFilter === 'Pending Review') return p.approvalStatus === 'Pending Review' || p.approvalStatus === 'Draft' || !p.approvalStatus;
+                      return p.approvalStatus === productReviewFilter;
+                    });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <div className="bg-white border border-stone-200 p-12 rounded-3xl text-center space-y-3">
+                          <CheckSquare className="h-10 w-10 text-stone-300 mx-auto" />
+                          <p className="text-stone-500 font-serif font-bold text-sm">
+                            {language === 'EN' ? 'No products matching this review status.' : 'මෙම තත්ත්වයට අදාළ නිෂ්පාදන නොමැත.'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {filteredList.map((prod) => {
+                          const statusColor = 
+                            prod.approvalStatus === 'Approved' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            prod.approvalStatus === 'Rejected' ? 'bg-red-50 text-red-800 border-red-200' :
+                            prod.approvalStatus === 'Changes Requested' ? 'bg-amber-50 text-amber-800 border-amber-300 font-extrabold' :
+                            prod.approvalStatus === 'Suspended' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                            'bg-amber-50 text-amber-800 border-amber-200 animate-pulse';
+
+                          return (
+                            <div key={prod.id} className="bg-white border border-stone-200/80 rounded-3xl p-5 shadow-xs space-y-4 hover:shadow-md transition">
+                              <div className="flex gap-4 items-start">
+                                <img
+                                  src={prod.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=200'}
+                                  alt={prod.name}
+                                  className="w-24 h-24 rounded-2xl object-cover shrink-0 bg-stone-100 border"
+                                />
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="bg-stone-100 text-stone-600 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                      {prod.category}
+                                    </span>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${statusColor}`}>
+                                      {prod.approvalStatus || 'Pending Review'}
+                                    </span>
+                                  </div>
+
+                                  <h4 className="font-serif font-bold text-stone-900 text-base leading-snug truncate">
+                                    {prod.name}
+                                  </h4>
+
+                                  <p className="text-xs text-stone-600 font-sans font-semibold">
+                                    Price: <span className="text-stone-900">{prod.priceRange}</span> • Min Order: <span className="text-stone-900">{prod.minimumOrder}</span>
+                                  </p>
+
+                                  <div className="pt-1 text-[11px] text-stone-500 font-sans space-y-0.5">
+                                    <p><strong className="text-stone-700">Partner:</strong> {prod.supplierName}</p>
+                                    <p><strong className="text-stone-700">District:</strong> {prod.district}</p>
+                                    {prod.submittedAt && (
+                                      <p><strong className="text-stone-700">Submitted:</strong> {new Date(prod.submittedAt).toLocaleDateString()}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Admin Notes / Rejection Callout */}
+                              {prod.rejectionReason && (
+                                <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-xs space-y-1">
+                                  <p className="font-serif font-bold text-amber-900">
+                                    {language === 'EN' ? 'Review Note / Reason:' : 'සමාලෝචන සටහන / හේතුව:'}
+                                  </p>
+                                  <p className="text-amber-800 font-sans leading-relaxed">
+                                    {prod.rejectionReason}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Action Buttons Toolbar */}
+                              <div className="pt-3 border-t border-stone-100 flex flex-wrap gap-2 justify-between items-center">
+                                <button
+                                  onClick={() => setSelectedProductForView(prod)}
+                                  className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center space-x-1 transition cursor-pointer"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>{language === 'EN' ? 'View Details' : 'විස්තර බලන්න'}</span>
+                                </button>
+
+                                <div className="flex items-center gap-1.5">
+                                  {prod.approvalStatus !== 'Approved' && (
+                                    <button
+                                      onClick={() => {
+                                        setReviewActionModal({
+                                          isOpen: true,
+                                          product: prod,
+                                          action: 'Approve',
+                                          presetReason: '',
+                                          customNotes: ''
+                                        });
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      <span>{language === 'EN' ? 'Approve' : 'අනුමත කරන්න'}</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    onClick={() => {
+                                      setReviewActionModal({
+                                        isOpen: true,
+                                        product: prod,
+                                        action: 'Changes Requested',
+                                        presetReason: 'Missing information',
+                                        customNotes: ''
+                                      });
+                                    }}
+                                    className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                    <span>{language === 'EN' ? 'Request Changes' : 'වෙනස්කම් ඉල්ලන්න'}</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setReviewActionModal({
+                                        isOpen: true,
+                                        product: prod,
+                                        action: 'Reject',
+                                        presetReason: 'Poor quality images',
+                                        customNotes: ''
+                                      });
+                                    }}
+                                    className="px-2.5 py-1.5 bg-red-100 hover:bg-red-200 text-red-900 rounded-xl text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                    <span>{language === 'EN' ? 'Reject' : 'ප්‍රතික්ෂේප කරන්න'}</span>
+                                  </button>
+
+                                  {prod.approvalStatus !== 'Suspended' && (
+                                    <button
+                                      onClick={() => {
+                                        setReviewActionModal({
+                                          isOpen: true,
+                                          product: prod,
+                                          action: 'Suspend',
+                                          presetReason: 'Other (Custom)',
+                                          customNotes: 'Policy violation or non-compliance.'
+                                        });
+                                      }}
+                                      className="p-1.5 text-stone-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                      title="Suspend product"
+                                    >
+                                      <AlertTriangle className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* ORDERS MANAGEMENT TAB (ADMIN / STAFF / PARTNER) */}
+              {activeTab === 'orders' && (
+                <div className="space-y-6 animate-fade-in" id="tab-orders">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
+                        <Package className="h-5 w-5 text-amber-700" />
+                        {currentUser.role === 'partner' 
+                          ? (language === 'EN' ? 'My Product Orders' : 'මගේ නිෂ්පාදන ඇණවුම්')
+                          : (language === 'EN' ? 'Ecosystem Customer Orders' : 'පද්ධති ඇණවුම් කළමනාකරණය')}
+                      </h3>
+                      <p className="text-xs text-stone-500 font-sans mt-1">
+                        {currentUser.role === 'partner'
+                          ? (language === 'EN' ? 'Manage customer orders placed on your verified products.' : 'ඔබගේ නිෂ්පාදන සඳහා ලැබුණු ඇණවුම් කළමනාකරණය කරන්න.')
+                          : (language === 'EN' ? 'Platform-wide order oversight and quality approval pipeline.' : 'සියලුම ඇණවුම් සහ ගුණාත්මකභාවය අනුමත කිරීමේ පද්ධතිය.')}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={refreshAllData}
+                      className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shrink-0 cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>{language === 'EN' ? 'Refresh Orders' : 'නැවුම් කරන්න'}</span>
+                    </button>
+                  </div>
+
+                  {/* Status Filter Pills */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                    {[
+                      { id: 'All', labelEN: 'All Orders', labelSI: 'සියල්ල', count: orders.length, color: 'bg-stone-100 text-stone-900 border-stone-300' },
+                      { id: 'Pending', labelEN: 'Pending', labelSI: 'පොරොත්තු', count: orders.filter(o => o.status === 'Pending').length, color: 'bg-amber-100 text-amber-900 border-amber-300' },
+                      { id: 'Accepted', labelEN: 'Accepted', labelSI: 'පිළිගෙන ඇත', count: orders.filter(o => o.status === 'Accepted').length, color: 'bg-blue-100 text-blue-900 border-blue-300' },
+                      { id: 'Preparing', labelEN: 'Preparing', labelSI: 'සූදානම් කරමින්', count: orders.filter(o => o.status === 'Preparing').length, color: 'bg-indigo-100 text-indigo-900 border-indigo-300' },
+                      { id: 'Ready For Quality Check', labelEN: 'Waiting Quality Check', labelSI: 'ගුණාත්මක සත්‍යාපනය', count: orders.filter(o => o.status === 'Ready For Quality Check').length, color: 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' },
+                      { id: 'Quality Approved', labelEN: 'Quality Approved', labelSI: 'ගුණාත්මකව අනුමතයි', count: orders.filter(o => o.status === 'Quality Approved').length, color: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
+                      { id: 'Dispatched', labelEN: 'Dispatched', labelSI: 'යවන ලදී', count: orders.filter(o => o.status === 'Dispatched').length, color: 'bg-cyan-100 text-cyan-900 border-cyan-300' },
+                      { id: 'Delivered', labelEN: 'Delivered', labelSI: 'භාරදෙන ලදී', count: orders.filter(o => o.status === 'Delivered').length, color: 'bg-teal-100 text-teal-900 border-teal-300' },
+                      { id: 'Completed', labelEN: 'Completed', labelSI: 'සම්පූර්ණයි', count: orders.filter(o => o.status === 'Completed').length, color: 'bg-stone-200 text-stone-800 border-stone-400' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setOrderFilter(f.id as any)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center space-x-2 border shrink-0 cursor-pointer ${
+                          orderFilter === f.id
+                            ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
+                            : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                        }`}
+                      >
+                        <span>{language === 'EN' ? f.labelEN : f.labelSI}</span>
+                        <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-black ${f.color}`}>
+                          {f.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Orders List Grid */}
+                  {(() => {
+                    const filteredOrders = orders.filter(o => {
+                      if (orderFilter === 'All') return true;
+                      return o.status === orderFilter;
+                    });
+
+                    if (filteredOrders.length === 0) {
+                      return (
+                        <div className="bg-white border border-stone-200 p-12 rounded-3xl text-center space-y-3">
+                          <Package className="h-10 w-10 text-stone-300 mx-auto" />
+                          <p className="text-stone-500 font-serif font-bold text-sm">
+                            {language === 'EN' ? 'No orders found matching this status.' : 'මෙම තත්ත්වයට අදාළ ඇණවුම් නොමැත.'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {filteredOrders.map((ord) => {
+                          const statusColor = 
+                            ord.status === 'Completed' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            ord.status === 'Quality Approved' ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold' :
+                            ord.status === 'Ready For Quality Check' ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold animate-pulse' :
+                            ord.status === 'Dispatched' ? 'bg-cyan-50 text-cyan-800 border-cyan-200' :
+                            ord.status === 'Delivered' ? 'bg-teal-50 text-teal-800 border-teal-200' :
+                            ord.status === 'Preparing' ? 'bg-indigo-50 text-indigo-800 border-indigo-200' :
+                            ord.status === 'Accepted' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                            'bg-amber-50 text-amber-800 border-amber-200';
+
+                          return (
+                            <div key={ord.id} className="bg-white border border-stone-200/80 rounded-3xl p-5 shadow-xs space-y-4 hover:shadow-md transition">
+                              {/* Order Header Bar */}
+                              <div className="flex flex-wrap justify-between items-center gap-2 border-b border-stone-100 pb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-xs text-stone-500">
+                                    #{ord.id.slice(0, 10).toUpperCase()}
+                                  </span>
+                                  <span className="text-xs text-stone-400 font-sans">
+                                    • {formatDateSafe(ord.createdAt)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-extrabold border uppercase tracking-wider ${statusColor}`}>
+                                    {ord.status}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Customer & Product Details Dual Grid */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                                {/* Customer & Shipping Info */}
+                                <div className="bg-stone-50/80 p-4 rounded-2xl border border-stone-200/60 space-y-1.5">
+                                  <p className="font-serif font-bold text-stone-900 text-sm flex items-center gap-1.5">
+                                    <User className="h-4 w-4 text-stone-600" />
+                                    {ord.customerInfo.name}
+                                  </p>
+                                  <p className="text-stone-600"><strong className="text-stone-700">Phone:</strong> {ord.customerInfo.phone}</p>
+                                  <p className="text-stone-600"><strong className="text-stone-700">Email:</strong> {ord.customerInfo.email}</p>
+                                  <p className="text-stone-600 leading-relaxed">
+                                    <strong className="text-stone-700">Delivery Address:</strong> {ord.customerInfo.address}, {ord.customerInfo.district || 'Colombo'}, {ord.customerInfo.country} ({ord.customerInfo.postalCode})
+                                  </p>
+                                </div>
+
+                                {/* Order & Product Specs */}
+                                <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200/50 space-y-1.5">
+                                  <p className="font-serif font-bold text-stone-900 text-sm flex items-center gap-1.5">
+                                    <ShoppingBag className="h-4 w-4 text-amber-700" />
+                                    {ord.productName}
+                                  </p>
+                                  <p className="text-stone-600"><strong className="text-stone-700">Quantity:</strong> {ord.quantity} units</p>
+                                  <p className="text-stone-600"><strong className="text-stone-700">Unit Price:</strong> Rs. {(ord.unitPrice || (ord.orderTotal / (ord.quantity || 1))).toLocaleString()}</p>
+                                  <p className="text-stone-900 font-bold text-sm pt-0.5">
+                                    Total Amount: <span className="text-emerald-700">Rs. {ord.orderTotal.toLocaleString()}</span>
+                                  </p>
+                                  <p className="text-stone-600"><strong className="text-stone-700">Payment Status:</strong> {ord.paymentStatus || 'Cash on Delivery'}</p>
+                                  {ord.notes && (
+                                    <p className="text-stone-600 italic bg-white/80 p-2 rounded-xl border border-stone-200/40 mt-1">
+                                      "{ord.notes}"
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Admin Quality Check / Rejection Alert Box */}
+                              {ord.rejectionReason && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs space-y-1">
+                                  <p className="font-serif font-bold text-red-900 flex items-center gap-1">
+                                    <AlertTriangle className="h-4 w-4 text-red-700" />
+                                    Admin Quality Check Feedback / Reason:
+                                  </p>
+                                  <p className="text-red-800 font-sans leading-relaxed">{ord.rejectionReason}</p>
+                                </div>
+                              )}
+
+                              {ord.qualityCheck && (
+                                <div className="p-3 bg-purple-50/80 border border-purple-200/80 rounded-2xl text-xs space-y-1">
+                                  <p className="font-serif font-bold text-purple-900">
+                                    Quality Check Specifications: Batch #{ord.qualityCheck.batchNumber} • Mfg: {ord.qualityCheck.manufacturingDate} • Exp: {ord.qualityCheck.expiryDate || 'N/A'}
+                                  </p>
+                                  {ord.qualityCheck.notes && (
+                                    <p className="text-purple-800">Notes: {ord.qualityCheck.notes}</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Action Buttons Toolbar */}
+                              <div className="pt-3 border-t border-stone-100 flex flex-wrap justify-between items-center gap-2">
+                                <button
+                                  onClick={() => setSelectedOrderForView(ord)}
+                                  className="px-3.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center space-x-1 transition cursor-pointer"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>{language === 'EN' ? 'View Details & Timeline' : 'විස්තර සහ කාලරේඛාව'}</span>
+                                </button>
+
+                                {/* Workflow Transitions */}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {/* PARTNER WORKFLOW BUTTONS */}
+                                  {currentUser.role === 'partner' && (
+                                    <>
+                                      {ord.status === 'Pending' && (
+                                        <button
+                                          onClick={() => handleUpdateOrderStatus(ord.id, 'Accepted')}
+                                          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs cursor-pointer"
+                                        >
+                                          Accept Order
+                                        </button>
+                                      )}
+
+                                      {ord.status === 'Accepted' && (
+                                        <button
+                                          onClick={() => handleUpdateOrderStatus(ord.id, 'Preparing')}
+                                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs cursor-pointer"
+                                        >
+                                          Start Preparing
+                                        </button>
+                                      )}
+
+                                      {ord.status === 'Preparing' && (
+                                        <button
+                                          onClick={() => setQualityCheckModal({
+                                            isOpen: true,
+                                            order: ord,
+                                            batchNumber: 'BATCH-' + Math.floor(1000 + Math.random() * 9000),
+                                            mfgDate: new Date().toISOString().split('T')[0],
+                                            expDate: '',
+                                            notes: ''
+                                          })}
+                                          className="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <CheckSquare className="h-3.5 w-3.5" />
+                                          Submit for Quality Check
+                                        </button>
+                                      )}
+
+                                      {ord.status === 'Ready For Quality Check' && (
+                                        <span className="px-3 py-1.5 bg-purple-50 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
+                                          <Clock className="h-3.5 w-3.5 text-purple-700" />
+                                          Waiting for Admin Quality Approval
+                                        </span>
+                                      )}
+
+                                      {ord.status === 'Quality Approved' && (
+                                        <button
+                                          onClick={() => handleUpdateOrderStatus(ord.id, 'Dispatched')}
+                                          className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Truck className="h-3.5 w-3.5" />
+                                          Dispatch Order
+                                        </button>
+                                      )}
+
+                                      {ord.status === 'Dispatched' && (
+                                        <button
+                                          onClick={() => handleUpdateOrderStatus(ord.id, 'Delivered')}
+                                          className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs cursor-pointer"
+                                        >
+                                          Mark Delivered
+                                        </button>
+                                      )}
+
+                                      {ord.status === 'Delivered' && (
+                                        <button
+                                          onClick={() => handleUpdateOrderStatus(ord.id, 'Completed')}
+                                          className="px-4 py-1.5 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs cursor-pointer"
+                                        >
+                                          Complete Order
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {/* ADMIN / STAFF QUALITY CHECK REVIEW BUTTONS */}
+                                  {['admin', 'staff'].includes(currentUser.role) && (
+                                    <>
+                                      {ord.status === 'Ready For Quality Check' && (
+                                        <div className="flex gap-1.5">
+                                          <button
+                                            onClick={() => setAdminQualityReviewModal({
+                                              isOpen: true,
+                                              order: ord,
+                                              action: 'Approve',
+                                              reason: ''
+                                            })}
+                                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-serif font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <Check className="h-3.5 w-3.5" />
+                                            Approve Quality
+                                          </button>
+
+                                          <button
+                                            onClick={() => setAdminQualityReviewModal({
+                                              isOpen: true,
+                                              order: ord,
+                                              action: 'Reject',
+                                              reason: 'Packaging hygiene specifications non-compliant'
+                                            })}
+                                            className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-900 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <X className="h-3.5 w-3.5" />
+                                            Reject Quality
+                                          </button>
+                                        </div>
+                                      )}
+
+                                      {ord.status !== 'Ready For Quality Check' && (
+                                        <select
+                                          value={ord.status}
+                                          onChange={(e) => handleUpdateOrderStatus(ord.id, e.target.value as Order['status'])}
+                                          className="px-3 py-1.5 border border-stone-300 rounded-xl text-xs font-bold text-stone-800 bg-white focus:outline-none cursor-pointer"
+                                        >
+                                          <option value="Pending">Pending</option>
+                                          <option value="Accepted">Accepted</option>
+                                          <option value="Preparing">Preparing</option>
+                                          <option value="Ready For Quality Check">Ready For Quality Check</option>
+                                          <option value="Quality Approved">Quality Approved</option>
+                                          <option value="Dispatched">Dispatched</option>
+                                          <option value="Delivered">Delivered</option>
+                                          <option value="Completed">Completed</option>
+                                        </select>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* PRODUCTS TAB (ADMIN / GROWERS) */}
               {activeTab === 'products' && (
                 <div className="space-y-6 animate-fade-in" id="tab-products">
@@ -2284,6 +2967,22 @@ export default function Dashboard({
                       <h4 className="font-bold text-stone-900 text-base">
                         {editingProduct ? 'Edit Product details' : 'Add New Product listing'}
                       </h4>
+                      {editingProduct && editingProduct.rejectionReason && (
+                        <div className="p-4 bg-amber-100/90 border border-amber-300 rounded-2xl text-xs space-y-1">
+                          <p className="font-serif font-bold text-amber-900 flex items-center gap-1.5">
+                            <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+                            {language === 'EN' ? 'Admin Review Note / Requested Changes:' : 'පරිපාලන සමාලෝචන සටහන / ඉල්ලා ඇති වෙනස්කම්:'}
+                          </p>
+                          <p className="text-amber-800 font-sans font-semibold leading-relaxed">
+                            {editingProduct.rejectionReason}
+                          </p>
+                          <p className="text-[10.5px] text-amber-700/90 italic pt-1">
+                            {language === 'EN' 
+                              ? 'Note: Resubmitting this product will set its status to "Pending Review" for admin verification.' 
+                              : 'සටහන: මෙම නිෂ්පාදනය නැවත යොමු කිරීමෙන් පසු එය පරිපාලන සත්‍යාපනය සඳහා "Pending Review" තත්ත්වයට පත්වේ.'}
+                          </p>
+                        </div>
+                      )}
                       <form onSubmit={handleProductSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-stone-700 font-semibold text-xs mb-1">Product Name</label>
@@ -4358,7 +5057,477 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* ============ UNIVERSAL DELETE CONFIRMATION MODAL ============ */}
+      {/* REVIEW ACTION MODAL (APPROVE / REJECT / REQUEST CHANGES / SUSPEND) */}
+      {reviewActionModal.isOpen && reviewActionModal.product && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl border border-stone-200 space-y-5 animate-scale-up">
+            <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-700">
+                  {language === 'EN' ? 'Product Approval Workflow' : 'නිෂ්පාදන අනුමැති ක්‍රියාවලිය'}
+                </span>
+                <h3 className="text-lg font-serif font-bold text-stone-900 leading-tight mt-0.5">
+                  {reviewActionModal.action === 'Approve' && (language === 'EN' ? 'Approve Product Listing' : 'නිෂ්පාදනය අනුමත කරන්න')}
+                  {reviewActionModal.action === 'Reject' && (language === 'EN' ? 'Reject Product Listing' : 'නිෂ්පාදනය ප්‍රතික්ෂේප කරන්න')}
+                  {reviewActionModal.action === 'Changes Requested' && (language === 'EN' ? 'Request Changes from Partner' : 'වෙනස්කම් සිදුකිරීමට පණිවිඩයක් යවන්න')}
+                  {reviewActionModal.action === 'Suspend' && (language === 'EN' ? 'Suspend Product Listing' : 'නිෂ්පාදනය අත්හිටුවන්න')}
+                </h3>
+              </div>
+              <button
+                onClick={() => setReviewActionModal({ isOpen: false, product: null, action: 'Approve', presetReason: '', customNotes: '' })}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Product Brief Summary */}
+            <div className="flex gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-200/60 items-center">
+              <img
+                src={reviewActionModal.product.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=100'}
+                alt={reviewActionModal.product.name}
+                className="w-14 h-14 rounded-xl object-cover border shrink-0 bg-white"
+              />
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="font-serif font-bold text-stone-900 truncate">{reviewActionModal.product.name}</p>
+                <p className="text-stone-500">{reviewActionModal.product.category} • {reviewActionModal.product.supplierName}</p>
+                <p className="text-stone-500 font-semibold">{reviewActionModal.product.priceRange}</p>
+              </div>
+            </div>
+
+            {/* Preset Selection & Notes for Reject / Request Changes / Suspend */}
+            {reviewActionModal.action !== 'Approve' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                    {language === 'EN' ? 'Select Reason / Issue Category:' : 'හේතුව / ගැටලු කාණ්ඩය තෝරන්න:'}
+                  </label>
+                  <select
+                    value={reviewActionModal.presetReason}
+                    onChange={(e) => setReviewActionModal({ ...reviewActionModal, presetReason: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs font-medium text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="Poor quality images">Poor quality or misleading images</option>
+                    <option value="Incorrect category">Incorrect or improper category selection</option>
+                    <option value="Invalid pricing">Invalid pricing structure or unrealistic price range</option>
+                    <option value="Missing information">Missing essential product specifications or minimum order details</option>
+                    <option value="Incorrect packaging details">Incorrect packaging or weight specifications</option>
+                    <option value="Food safety information missing">Food safety information, license, or hygiene details missing</option>
+                    <option value="Other (Custom)">Other (Specify custom details below)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                    {language === 'EN' ? 'Detailed Admin Review Notes & Guidance for Partner:' : 'හවුල්කරු සඳහා විශේෂිත සටහන් සහ උපදෙස්:'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={reviewActionModal.customNotes}
+                    onChange={(e) => setReviewActionModal({ ...reviewActionModal, customNotes: e.target.value })}
+                    placeholder={language === 'EN' ? 'Specify exact changes required or detailed reason...' : 'වෙනස් කළ යුතු කරුණු පැහැදිලිව සඳහන් කරන්න...'}
+                    className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  ></textarea>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
+                <p className="font-serif font-bold">
+                  {language === 'EN' ? 'Confirm Approval' : 'අනුමැතිය තහවුරු කරන්න'}
+                </p>
+                <p className="text-emerald-800 leading-relaxed">
+                  {language === 'EN' 
+                    ? 'Approving this product will instantly publish it to the Ecosystem Marketplace for customers worldwide.'
+                    : 'මෙම නිෂ්පාදනය අනුමත කිරීමෙන් එය වෙළඳපොළට සජීවීව එක් කෙරේ.'}
+                </p>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setReviewActionModal({ isOpen: false, product: null, action: 'Approve', presetReason: '', customNotes: '' })}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                {language === 'EN' ? 'Cancel' : 'අවලංගු කරන්න'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReviewAction}
+                className={`px-5 py-2 text-white text-xs font-serif font-bold rounded-xl transition shadow-xs cursor-pointer ${
+                  reviewActionModal.action === 'Approve' ? 'bg-emerald-600 hover:bg-emerald-700' :
+                  reviewActionModal.action === 'Changes Requested' ? 'bg-amber-700 hover:bg-amber-800' :
+                  reviewActionModal.action === 'Suspend' ? 'bg-rose-700 hover:bg-rose-800' :
+                  'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {reviewActionModal.action === 'Approve' && (language === 'EN' ? 'Confirm Approval' : 'අනුමත කරන්න')}
+                {reviewActionModal.action === 'Changes Requested' && (language === 'EN' ? 'Send Request' : 'පණිවිඩය යවන්න')}
+                {reviewActionModal.action === 'Reject' && (language === 'EN' ? 'Reject Product' : 'ප්‍රතික්ෂේප කරන්න')}
+                {reviewActionModal.action === 'Suspend' && (language === 'EN' ? 'Suspend Listing' : 'අත්හිටුවන්න')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRODUCT FULL DETAILS PREVIEW MODAL */}
+      {selectedProductForView && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-xl border border-stone-200 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar animate-scale-up">
+            <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-500">
+                  Product Preview & Verification
+                </span>
+                <h3 className="text-xl font-serif font-bold text-stone-900">
+                  {selectedProductForView.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedProductForView(null)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Images gallery */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(selectedProductForView.images && selectedProductForView.images.length > 0 ? selectedProductForView.images : [selectedProductForView.imageUrl]).map((img, idx) => (
+                <img
+                  key={idx}
+                  src={img || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=300'}
+                  alt={`Product ${idx + 1}`}
+                  className="w-full h-32 rounded-2xl object-cover border bg-stone-50"
+                />
+              ))}
+            </div>
+
+            {/* Product Detail Specs */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-stone-50 p-4 rounded-2xl border text-xs">
+              <div>
+                <span className="text-stone-400 font-bold block text-[10px] uppercase">Category</span>
+                <span className="font-serif font-bold text-stone-900">{selectedProductForView.category}</span>
+              </div>
+              <div>
+                <span className="text-stone-400 font-bold block text-[10px] uppercase">Price Range</span>
+                <span className="font-serif font-bold text-stone-900">{selectedProductForView.priceRange}</span>
+              </div>
+              <div>
+                <span className="text-stone-400 font-bold block text-[10px] uppercase">Min Order</span>
+                <span className="font-serif font-bold text-stone-900">{selectedProductForView.minimumOrder}</span>
+              </div>
+              <div>
+                <span className="text-stone-400 font-bold block text-[10px] uppercase">Monthly Capacity</span>
+                <span className="font-serif font-bold text-stone-900">{selectedProductForView.monthlyCapacity}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <h4 className="font-serif font-bold text-stone-900 text-sm">Product Description</h4>
+              <p className="text-stone-600 leading-relaxed bg-stone-50/60 p-4 rounded-2xl border border-stone-200/50 whitespace-pre-line">
+                {selectedProductForView.description}
+              </p>
+            </div>
+
+            <div className="bg-amber-50/60 border border-amber-200/60 p-4 rounded-2xl text-xs space-y-1">
+              <p className="font-serif font-bold text-stone-900">Partner & Origin Info</p>
+              <p className="text-stone-600"><strong className="text-stone-800">Partner Name:</strong> {selectedProductForView.supplierName}</p>
+              <p className="text-stone-600"><strong className="text-stone-800">District:</strong> {selectedProductForView.district}</p>
+              <p className="text-stone-600"><strong className="text-stone-800">Partner ID:</strong> {selectedProductForView.supplierId || selectedProductForView.ownerId}</p>
+              {selectedProductForView.rejectionReason && (
+                <div className="pt-2 text-amber-900">
+                  <strong>Current Review Note:</strong> {selectedProductForView.rejectionReason}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                onClick={() => setSelectedProductForView(null)}
+                className="px-4 py-2 bg-stone-200 text-stone-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PARTNER QUALITY CHECK SUBMISSION MODAL */}
+      {qualityCheckModal.isOpen && qualityCheckModal.order && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-stone-200 space-y-5 animate-scale-up">
+            <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-purple-700">
+                  Quality Assurance Protocol
+                </span>
+                <h3 className="text-lg font-serif font-bold text-stone-900 leading-tight">
+                  Submit for Quality Inspection
+                </h3>
+              </div>
+              <button
+                onClick={() => setQualityCheckModal({ isOpen: false, order: null, batchNumber: '', mfgDate: '', expDate: '', notes: '' })}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
+                <p className="font-serif font-bold text-stone-900">{qualityCheckModal.order.productName}</p>
+                <p className="text-stone-500">Order ID: #{qualityCheckModal.order.id.slice(0, 10)} • Quantity: {qualityCheckModal.order.quantity} units</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Batch / Harvest Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={qualityCheckModal.batchNumber}
+                  onChange={(e) => setQualityCheckModal({ ...qualityCheckModal, batchNumber: e.target.value })}
+                  placeholder="e.g. BATCH-9821"
+                  className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl font-mono text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Manufacturing Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={qualityCheckModal.mfgDate}
+                    onChange={(e) => setQualityCheckModal({ ...qualityCheckModal, mfgDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Expiry / Best Before</label>
+                  <input
+                    type="date"
+                    value={qualityCheckModal.expDate}
+                    onChange={(e) => setQualityCheckModal({ ...qualityCheckModal, expDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Packaging & Quality Notes</label>
+                <textarea
+                  rows={2}
+                  value={qualityCheckModal.notes}
+                  onChange={(e) => setQualityCheckModal({ ...qualityCheckModal, notes: e.target.value })}
+                  placeholder="e.g. Vacuum sealed, sanitized packaging, temperature maintained..."
+                  className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setQualityCheckModal({ isOpen: false, order: null, batchNumber: '', mfgDate: '', expDate: '', notes: '' })}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateOrderStatus(
+                    qualityCheckModal.order!.id,
+                    'Ready For Quality Check',
+                    {
+                      productPhotos: [],
+                      packagingPhotos: [],
+                      batchNumber: qualityCheckModal.batchNumber || 'BATCH-001',
+                      manufacturingDate: qualityCheckModal.mfgDate,
+                      expiryDate: qualityCheckModal.expDate,
+                      notes: qualityCheckModal.notes
+                    }
+                  );
+                }}
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white text-xs font-serif font-bold rounded-xl transition shadow-xs cursor-pointer"
+              >
+                Submit Quality Inspection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN QUALITY REVIEW MODAL */}
+      {adminQualityReviewModal.isOpen && adminQualityReviewModal.order && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl border border-stone-200 space-y-5 animate-scale-up">
+            <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-700">
+                  Admin Quality Check Verification
+                </span>
+                <h3 className="text-lg font-serif font-bold text-stone-900">
+                  {adminQualityReviewModal.action === 'Approve' ? 'Approve Quality Inspection' : 'Reject Quality Inspection'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setAdminQualityReviewModal({ isOpen: false, order: null, action: 'Approve', reason: '' })}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/60 space-y-2 text-xs">
+              <p className="font-serif font-bold text-stone-900 text-sm">{adminQualityReviewModal.order.productName}</p>
+              <p className="text-stone-600">Order ID: #{adminQualityReviewModal.order.id} • Partner ID: {adminQualityReviewModal.order.ownerId}</p>
+              {adminQualityReviewModal.order.qualityCheck && (
+                <div className="pt-2 border-t border-stone-200 text-stone-700 space-y-1">
+                  <p><strong>Batch #:</strong> {adminQualityReviewModal.order.qualityCheck.batchNumber}</p>
+                  <p><strong>Mfg Date:</strong> {adminQualityReviewModal.order.qualityCheck.manufacturingDate}</p>
+                  {adminQualityReviewModal.order.qualityCheck.notes && (
+                    <p><strong>Partner Notes:</strong> {adminQualityReviewModal.order.qualityCheck.notes}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {adminQualityReviewModal.action === 'Reject' ? (
+              <div className="space-y-2 text-xs">
+                <label className="block font-bold text-stone-700">Rejection Reason & Required Fixes *</label>
+                <textarea
+                  rows={3}
+                  value={adminQualityReviewModal.reason}
+                  onChange={(e) => setAdminQualityReviewModal({ ...adminQualityReviewModal, reason: e.target.value })}
+                  placeholder="Specify exact packaging or quality issues to be fixed..."
+                  className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                ></textarea>
+              </div>
+            ) : (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900">
+                <p className="font-serif font-bold">Confirm Quality Approval</p>
+                <p className="text-emerald-800 leading-relaxed mt-0.5">
+                  Approving this quality check will unlock the order for the partner to dispatch.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setAdminQualityReviewModal({ isOpen: false, order: null, action: 'Approve', reason: '' })}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (adminQualityReviewModal.action === 'Approve') {
+                    handleUpdateOrderStatus(adminQualityReviewModal.order!.id, 'Quality Approved');
+                  } else {
+                    handleUpdateOrderStatus(
+                      adminQualityReviewModal.order!.id,
+                      'Preparing',
+                      undefined,
+                      adminQualityReviewModal.reason || 'Quality inspection failed. Please fix packaging.'
+                    );
+                  }
+                }}
+                className={`px-5 py-2 text-white text-xs font-serif font-bold rounded-xl transition shadow-xs cursor-pointer ${
+                  adminQualityReviewModal.action === 'Approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {adminQualityReviewModal.action === 'Approve' ? 'Confirm Approval' : 'Send Rejection Feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL ORDER DETAILS & TIMELINE MODAL */}
+      {selectedOrderForView && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-xl border border-stone-200 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar animate-scale-up">
+            <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-500">
+                  Comprehensive Order Record
+                </span>
+                <h3 className="text-xl font-serif font-bold text-stone-900">
+                  Order #{selectedOrderForView.id}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedOrderForView(null)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Customer Details */}
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/60 space-y-2 text-xs">
+              <h4 className="font-serif font-bold text-stone-900 text-sm">Customer & Shipping Information</h4>
+              <div className="grid grid-cols-2 gap-2 text-stone-700">
+                <p><strong>Customer Name:</strong> {selectedOrderForView.customerInfo.name}</p>
+                <p><strong>Phone Number:</strong> {selectedOrderForView.customerInfo.phone}</p>
+                <p><strong>Email Address:</strong> {selectedOrderForView.customerInfo.email}</p>
+                <p><strong>District:</strong> {selectedOrderForView.customerInfo.district || 'Colombo'}</p>
+                <p><strong>Country:</strong> {selectedOrderForView.customerInfo.country}</p>
+                <p><strong>Postal Code:</strong> {selectedOrderForView.customerInfo.postalCode}</p>
+              </div>
+              <p className="text-stone-700 pt-1"><strong>Delivery Address:</strong> {selectedOrderForView.customerInfo.address}</p>
+            </div>
+
+            {/* Product & Payment Info */}
+            <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200/50 space-y-2 text-xs">
+              <h4 className="font-serif font-bold text-stone-900 text-sm">Ordered Product Specs</h4>
+              <div className="grid grid-cols-2 gap-2 text-stone-700">
+                <p><strong>Product Name:</strong> {selectedOrderForView.productName}</p>
+                <p><strong>Quantity Ordered:</strong> {selectedOrderForView.quantity} units</p>
+                <p><strong>Unit Price:</strong> Rs. {(selectedOrderForView.unitPrice || (selectedOrderForView.orderTotal / selectedOrderForView.quantity)).toLocaleString()}</p>
+                <p><strong>Order Total:</strong> Rs. {selectedOrderForView.orderTotal.toLocaleString()}</p>
+                <p><strong>Payment Method / Status:</strong> {selectedOrderForView.paymentStatus || 'Cash on Delivery'}</p>
+                <p><strong>Owner Type:</strong> {selectedOrderForView.ownerType.toUpperCase()}</p>
+              </div>
+              {selectedOrderForView.notes && (
+                <p className="text-stone-700 italic pt-1"><strong>Order Notes:</strong> "{selectedOrderForView.notes}"</p>
+              )}
+            </div>
+
+            {/* Order Status Timeline */}
+            <div className="space-y-3 text-xs">
+              <h4 className="font-serif font-bold text-stone-900 text-sm">Order Progress Timeline</h4>
+              <div className="space-y-2 pl-2 border-l-2 border-amber-500/40">
+                {(selectedOrderForView.history || [{ status: selectedOrderForView.status, timestamp: selectedOrderForView.createdAt }]).map((h, i) => (
+                  <div key={i} className="relative pl-4">
+                    <div className="absolute -left-[13px] top-1 h-2.5 w-2.5 rounded-full bg-amber-600 ring-4 ring-amber-100"></div>
+                    <p className="font-bold text-stone-800">{h.status}</p>
+                    <p className="text-[10.5px] text-stone-500">{formatDateSafe(h.timestamp)} ({new Date(h.timestamp).toLocaleTimeString()})</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-stone-100">
+              <button
+                onClick={() => setSelectedOrderForView(null)}
+                className="px-4 py-2 bg-stone-200 text-stone-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Close Order View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* ============ UNIVERSAL DELETE CONFIRMATION MODAL ============ */}
       {deleteConfirm.show && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-fade-in">
           <div className="bg-white border border-stone-200 rounded-[28px] max-w-sm w-full p-6 space-y-5 shadow-2xl relative">

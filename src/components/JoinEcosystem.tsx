@@ -65,7 +65,7 @@ export default function JoinEcosystem({ language, onSubmitSuccess }: JoinEcosyst
         interestedArea: formData.interestedArea,
         monthlyCapacity: formData.monthlyCapacity || '0',
         message: formData.message,
-        status: 'pending' // Default status is pending
+        status: 'Pending Verification', // Default status is pending
       });
 
       setSuccess(true);

@@ -301,7 +301,7 @@ export default function App() {
               email: user.email || '',
               phone: '',
               role: 'grower',
-              status: 'pending',
+              status: 'Pending Verification',
               createdAt: new Date().toISOString()
             };
             await dataService.createUserProfile(user.uid, defaultProf);
@@ -373,7 +373,7 @@ export default function App() {
         email: email,
         phone: authPhone || '0771234567',
         role: authMode === 'signup' ? authRole : 'grower',
-        status: 'approved',
+        status: authRole === 'partner' ? 'Pending Verification' : 'Approved',
         membershipId: `LK-COOP-GGL-${serial}`,
         bio: 'Premium ecosystem partner registered securely via Google Integration.',
         preferredLanguage: 'EN',
@@ -423,7 +423,7 @@ export default function App() {
               email: userEmail,
               phone: authPhone || user.phoneNumber || '0770000000',
               role: userEmail.toLowerCase().startsWith('admin@') ? 'admin' : (authMode === 'signup' ? authRole : 'grower'),
-              status: 'approved',
+              status: authRole === 'partner' ? 'Pending Verification' : 'Approved',
               membershipId: `LK-MUSH-GGL-${serial}`,
               bio: 'Eco-system member registered securely via Google Authentication.',
               preferredLanguage: 'EN',
@@ -557,7 +557,7 @@ export default function App() {
         }
 
         // Account suspension guard
-        if (profile.status === 'suspended') {
+        if (profile.status === 'Suspended') {
           await dataService.addSecurityAuditLog({
             userId: profile.uid,
             userEmail: profile.email,
@@ -610,7 +610,7 @@ export default function App() {
           phone: sanitizedPhone,
           role: authRole,
           password: authPassword,
-          status: 'pending',
+          status: 'Pending Verification',
           createdAt: new Date().toISOString()
         };
 
@@ -636,7 +636,7 @@ export default function App() {
               phone: sanitizedPhone,
               role: authEmail.toLowerCase().startsWith('admin@') ? 'admin' : authRole,
               password: authPassword,
-              status: 'approved', // Admin should also be automatically approved
+              status: authRole === 'partner' ? 'Pending Verification' : 'Approved', // Partners need manual approval
               createdAt: new Date().toISOString()
             };
             
