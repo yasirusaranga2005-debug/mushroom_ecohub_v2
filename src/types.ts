@@ -12,7 +12,7 @@ export interface UserProfile {
   interestedArea?: string;
   monthlyCapacity?: string;
   message?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  status: 'Pending Verification' | 'Under Review' | 'Approved' | 'Rejected' | 'Suspended';
   createdAt: string;
   // Enriched real-world attributes
   membershipId?: string;
@@ -22,6 +22,16 @@ export interface UserProfile {
   productionArea?: string;
   gpsCoordinates?: string;
   password?: string;
+  businessName?: string;
+  ownerName?: string;
+  businessRegistration?: string;
+  nic?: string;
+  businessDescription?: string;
+  uploadedDocuments?: string[];
+  productImages?: string[];
+  packaging?: string[];
+  certifications?: string[];
+  verificationNotes?: string;
 }
 
 export interface EcosystemMember {
@@ -36,7 +46,7 @@ export interface EcosystemMember {
   interestedArea: string;
   monthlyCapacity: string;
   message: string;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  status: 'Pending Verification' | 'Under Review' | 'Approved' | 'Rejected' | 'Suspended';
   createdAt: string;
 }
 
@@ -48,12 +58,20 @@ export interface Product {
   district: string;
   supplierName: string;
   supplierId: string;
+  ownerId?: string;
+  ownerType?: 'admin' | 'partner';
   minimumOrder: string;
   monthlyCapacity: string;
   priceRange: string;
   imageUrl: string;
   images?: string[];
   status: 'Available' | 'Out of Stock';
+  approvalStatus?: 'Draft' | 'Pending Review' | 'Approved' | 'Rejected' | 'Changes Requested' | 'Hidden' | 'Suspended';
+  rejectionReason?: string;
+  adminNotes?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
   createdAt: string;
 }
 
@@ -197,4 +215,85 @@ export interface SecurityAuditLog {
   createdAt: string;
 }
 
+export interface ProductInquiry {
+  id: string;
+  productId: string;
+  productName: string;
+  ownerId: string;
+  ownerType: 'admin' | 'partner';
+  name: string;
+  company?: string;
+  email: string;
+  phone: string;
+  country: string;
+  quantity: string;
+  message: string;
+  status: 'Pending Inquiries' | 'Answered' | 'Closed';
+  createdAt: string;
+}
 
+export interface Order {
+  id: string;
+  productId: string;
+  productName: string;
+  ownerId: string;
+  ownerType: 'admin' | 'partner';
+  customerInfo: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    district?: string;
+    country: string;
+    postalCode: string;
+  };
+  quantity: number;
+  unitPrice?: number;
+  orderTotal: number;
+  platformCommission: number;
+  partnerEarnings: number;
+  paymentStatus?: 'Pending' | 'Paid' | 'Cash on Delivery';
+  notes: string;
+  status: 'Pending' | 'Accepted' | 'Preparing' | 'Ready For Quality Check' | 'Quality Approved' | 'Dispatched' | 'Delivered' | 'Completed';
+  rejectionReason?: string;
+  qualityCheck?: {
+    productPhotos: string[];
+    packagingPhotos: string[];
+    batchNumber: string;
+    manufacturingDate: string;
+    expiryDate: string;
+    notes: string;
+    adminNotes?: string;
+  };
+  createdAt: string;
+  history?: { status: string; timestamp: string; }[];
+}
+
+export interface Wallet {
+  id: string;
+  partnerId: string;
+  balance: number;
+  pendingEarnings: number;
+  availableBalance: number;
+  commissionRate: number;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  partnerId: string;
+  amount: number;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  requestedAt: string;
+  processedAt?: string;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  orderId: string;
+  customerId: string;
+  rating: number;
+  comment: string;
+  images?: string[];
+  createdAt: string;
+}

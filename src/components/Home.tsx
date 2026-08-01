@@ -2,14 +2,14 @@ import React from 'react';
 import { Product } from '../types';
 import { dataService } from '../lib/dataService';
 const heroBg = "https://firebasestorage.googleapis.com/v0/b/oval-team-6fdq2.firebasestorage.app/o/Hero-final.webp?alt=media&token=8ff45da8-56dd-43ce-b3f9-9f72bb124f38";
-import { 
-  Sprout, 
-  ArrowRight, 
-  Award, 
-  Users, 
-  TrendingUp, 
-  BookOpen, 
-  Layers, 
+import {
+  Sprout,
+  ArrowRight,
+  Award,
+  Users,
+  TrendingUp,
+  BookOpen,
+  Layers,
   ShoppingBag,
   Cpu,
   Smile,
@@ -40,9 +40,9 @@ interface HomeProps {
   currentUserId?: string;
 }
 
-export default function Home({ 
-  language, 
-  setCurrentTab, 
+export default function Home({
+  language,
+  setCurrentTab,
   onOpenJoinForm,
   currentUserEmail,
   currentUserId
@@ -141,12 +141,13 @@ export default function Home({
   return (
     <div className="bg-brand-cream/20 min-h-screen text-brand-text" id="home-page">
       {/* Hero Section */}
-      <section 
+      <section
         id="hero-section"
         className="relative overflow-hidden bg-[#FFFDF7] md:bg-cover md:bg-[center_right] md:bg-no-repeat border-b border-brand-border/40 min-h-screen md:min-h-[760px] flex items-center pt-24 pb-12 md:py-0"
       >
         {/* Absolute Background Image for desktop with standard inline style for robust rendering */}
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @media (min-width: 768px) {
             #hero-section {
               background-image: url("${heroImg}");
@@ -156,12 +157,12 @@ export default function Home({
 
         {/* Subtle organic textured background overlay */}
         <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#5A5A40_1.5px,transparent_1.5px)] [background-size:24px_24px] z-10"></div>
-        
+
         <div className="max-w-[1280px] mx-auto px-6 md:px-8 relative z-20 w-full flex flex-col justify-center">
-          
+
           {/* Left Content Column - taking exactly ~44% to 50% width on desktop to leave the right products untouched */}
           <div className="relative z-30 space-y-6 sm:space-y-8 text-left w-full md:w-[50%] lg:w-[46%] xl:w-[44%] md:max-w-[600px] md:my-16">
-            
+
             {/* National Ecosystem Pill Badge */}
             <div className="inline-flex items-center space-x-2 bg-[#EAECE1] border border-[#D5DAD0] px-4 py-1.5 rounded-full text-[#384C2F] text-xs font-semibold tracking-wide shadow-xs">
               <Sprout className="h-4 w-4 text-[#A57C3E]" />
@@ -202,7 +203,7 @@ export default function Home({
                 className="bg-[#0D3E26] hover:bg-[#072415] text-white text-xs lg:text-sm font-semibold px-7 py-3 sm:py-3.5 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap w-full sm:w-auto shrink-0"
                 id="hero-cta-join"
               >
-                <span>{language === 'EN' ? 'Join the Ecosystem' : 'පරිසර පද්ධතියට එක්වන්න'}</span>
+                <span>{language === 'EN' ? 'Join the Ecosystem 2222' : 'පරිසර පද්ධතියට එක්වන්න'}</span>
                 <ArrowRight className="h-4 w-4 text-white/80 shrink-0" />
               </button>
               <button
@@ -229,8 +230,8 @@ export default function Home({
                 <Sprout className="h-3.5 w-3.5 text-[#A57C3E]" />
               </div>
               <span className="text-xs text-[#5D6352] font-semibold tracking-wide font-serif">
-                {language === 'EN' 
-                  ? 'From cultivation to branded value-added products.' 
+                {language === 'EN'
+                  ? 'From cultivation to branded value-added products.'
                   : 'වගාවේ සිට සන්නාමගත අගය එකතු කළ නිෂ්පාදන දක්වා.'}
               </span>
             </div>
@@ -280,8 +281,8 @@ export default function Home({
                 {language === 'EN' ? 'Eco-Hub Co-operative Philosophy' : 'පරිසර කේන්ද්‍රීය සමුපකාර දර්ශනය'}
               </h4>
               <p className="text-brand-text/80 text-xs sm:text-sm">
-                {language === 'EN' 
-                  ? 'Our mission is organized shared growth. Not isolation or hostile price cuts.' 
+                {language === 'EN'
+                  ? 'Our mission is organized shared growth. Not isolation or hostile price cuts.'
                   : 'අපගේ අරමුණ සංවිධානාත්මක පොදු වර්ධනයයි. හුදකලා වීම හෝ අහිතකර ලෙස මිල අඩු කිරීම් නොවේ.'}
               </p>
             </div>
@@ -389,8 +390,8 @@ export default function Home({
                     {language === 'EN' ? 'Stronger Together' : 'ජාතික අරමුණ'}
                   </p>
                   <p className="text-xs text-white/85 leading-relaxed">
-                    {language === 'EN' 
-                      ? 'Connecting people, creating prosperity.' 
+                    {language === 'EN'
+                      ? 'Connecting people, creating prosperity.'
                       : 'හතු වගාව ග්‍රාමීය පවුල් සඳහා ඉහළ ආදායම් උපදවන ක්ෂුද්‍ර ව්‍යාපාරයක් ලෙස ප්‍රවර්ධනය කිරීම.'}
                   </p>
                 </div>
@@ -632,18 +633,17 @@ export default function Home({
           ].map((card, idx) => (
             <div key={idx} className="bg-white border border-brand-border hover:border-brand-orange/40 p-6 rounded-[32px] shadow-sm hover:shadow transition flex flex-col justify-between">
               <div>
-                <div className={`p-3 rounded-xl inline-block mb-4 ${
-                  card.color === 'sage' ? 'bg-brand-dark-green/10 text-brand-dark-green' :
-                  card.color === 'terracotta' ? 'bg-brand-orange/10 text-brand-orange' :
-                  'bg-brand-brown/10 text-brand-brown'
-                }`}>
+                <div className={`p-3 rounded-xl inline-block mb-4 ${card.color === 'sage' ? 'bg-brand-dark-green/10 text-brand-dark-green' :
+                    card.color === 'terracotta' ? 'bg-brand-orange/10 text-brand-orange' :
+                      'bg-brand-brown/10 text-brand-brown'
+                  }`}>
                   <card.icon className="h-6 w-6" />
                 </div>
                 <h3 className="font-serif font-bold text-brand-text text-lg mb-2 leading-snug">{card.role}</h3>
                 <p className="text-brand-text/80 text-xs leading-relaxed">{card.desc}</p>
               </div>
               <div className="mt-4 pt-4 border-t border-brand-border/60">
-                <button 
+                <button
                   onClick={onOpenJoinForm}
                   className="text-xs font-serif font-bold text-brand-brown hover:text-brand-orange flex items-center space-x-1"
                 >
@@ -703,8 +703,8 @@ export default function Home({
                 </div>
                 <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-bold">
                   <span className="text-white">LKR High Margins</span>
-                  <button 
-                    onClick={() => setCurrentTab('marketplace')} 
+                  <button
+                    onClick={() => setCurrentTab('marketplace')}
                     className="text-brand-cream/90 hover:text-white flex items-center space-x-1 font-serif"
                   >
                     <span>{language === 'EN' ? 'Browse' : 'නරඹන්න'}</span>
@@ -757,12 +757,12 @@ export default function Home({
                     {language === 'EN' ? 'Submit Product Inquiry' : 'නිෂ්පාදන මිල විමසීම'}
                   </h3>
                   <p className="text-brand-cream/85 text-xs mt-1 font-sans">
-                    {language === 'EN' 
-                      ? 'Your direct request will be visible immediately to the supplier.' 
+                    {language === 'EN'
+                      ? 'Your direct request will be visible immediately to the supplier.'
                       : 'ඔබේ ඉල්ලීම සෘජුවම අදාළ සැපයුම්කරු වෙත යොමු කරනු ලැබේ.'}
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedProduct(null)}
                   className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition shrink-0"
                 >
@@ -798,8 +798,8 @@ export default function Home({
                     {language === 'EN' ? 'Inquiring For' : 'විමසීම් කරන භාණ්ඩය'}
                   </span>
                   <div className="flex items-center space-x-3">
-                    <img 
-                      src={selectedProduct.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=400'} 
+                    <img
+                      src={selectedProduct.imageUrl || 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=400'}
                       alt={selectedProduct.name}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&q=80&w=400';
@@ -922,8 +922,8 @@ export default function Home({
                       <Send className="h-3 w-3 text-white" />
                     )}
                     <span>
-                      {submittingInquiry 
-                        ? (language === 'EN' ? 'Submitting...' : 'යොමු වෙමින්...') 
+                      {submittingInquiry
+                        ? (language === 'EN' ? 'Submitting...' : 'යොමු වෙමින්...')
                         : (language === 'EN' ? 'Send Inquiry' : 'මිල විමසන්න')}
                     </span>
                   </button>
@@ -940,8 +940,8 @@ export default function Home({
           .filter((p) => p.id !== expandedProduct.id)
           .filter((p) => p.category === expandedProduct.category)
           .slice(0, 3);
-        const relatedList = related.length > 0 
-          ? related 
+        const relatedList = related.length > 0
+          ? related
           : allProducts.filter((p) => p.id !== expandedProduct.id).slice(0, 3);
 
         return (
@@ -967,9 +967,8 @@ export default function Home({
                     <span className="bg-brand-dark-green text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-full uppercase tracking-wider">
                       {expandedProduct.category}
                     </span>
-                    <span className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-full uppercase tracking-wider ${
-                      expandedProduct.status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                    }`}>
+                    <span className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-full uppercase tracking-wider ${expandedProduct.status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
                       {expandedProduct.status === 'Available' ? (language === 'EN' ? 'Available' : 'ලබාගත හැක') : (language === 'EN' ? 'Out of Stock' : 'තොග අවසන්')}
                     </span>
                   </div>
@@ -1003,8 +1002,8 @@ export default function Home({
                         expandedProduct.category.toLowerCase().includes('dried') || expandedProduct.category.toLowerCase().includes('powder')
                           ? (language === 'EN' ? '12 months (Keep airtight in cool dark place)' : 'මාස 12 ක් (සිසිල් වියළි ස්ථානයක තබන්න)')
                           : expandedProduct.category.toLowerCase().includes('spawn') || expandedProduct.category.toLowerCase().includes('bags')
-                          ? (language === 'EN' ? '30-45 days (Store under 25°C)' : 'දින 30-45 ක් (සෙල්සියස් 25 ට අඩුවෙන් තබන්න)')
-                          : (language === 'EN' ? '5-7 days (Keep refrigerated)' : 'දින 5-7 ක් (ශීතකරණයේ තබන්න)')
+                            ? (language === 'EN' ? '30-45 days (Store under 25°C)' : 'දින 30-45 ක් (සෙල්සියස් 25 ට අඩුවෙන් තබන්න)')
+                            : (language === 'EN' ? '5-7 days (Keep refrigerated)' : 'දින 5-7 ක් (ශීතකරණයේ තබන්න)')
                       }</li>
                     </ul>
                   </div>
@@ -1086,7 +1085,7 @@ export default function Home({
                     </p>
                     {/* Additional details for rich experience */}
                     <p className="text-stone-500 text-[11px] leading-relaxed italic">
-                      {language === 'EN' 
+                      {language === 'EN'
                         ? 'All products are monitored under the Mushroom Eco Hub Quality Management guidelines. If you send an inquiry, the supplier will instantly receive your contact info to call or message you back.'
                         : 'සියලුම නිෂ්පාදන හතු ඉකෝ හබ් තත්ත්ව පාලන මාර්ගෝපදේශ යටතේ නිරීක්ෂණය කෙරේ. ඔබ මිල විමසීමක් යොමු කළ විට, සපයන්නාට ඔබේ තොරතුරු ලැබී වහාම ඔබව සම්බන්ධ කර ගනු ඇත.'}
                     </p>
