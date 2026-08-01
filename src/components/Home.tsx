@@ -203,7 +203,7 @@ export default function Home({
                 className="bg-[#0D3E26] hover:bg-[#072415] text-white text-xs lg:text-sm font-semibold px-7 py-3 sm:py-3.5 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap w-full sm:w-auto shrink-0"
                 id="hero-cta-join"
               >
-                <span>{language === 'EN' ? 'Join the Ecosystem 2222' : 'පරිසර පද්ධතියට එක්වන්න'}</span>
+                <span>{language === 'EN' ? 'Join the Ecosystem 00000000000000000' : 'පරිසර පද්ධතියට එක්වන්න'}</span>
                 <ArrowRight className="h-4 w-4 text-white/80 shrink-0" />
               </button>
               <button
@@ -634,8 +634,8 @@ export default function Home({
             <div key={idx} className="bg-white border border-brand-border hover:border-brand-orange/40 p-6 rounded-[32px] shadow-sm hover:shadow transition flex flex-col justify-between">
               <div>
                 <div className={`p-3 rounded-xl inline-block mb-4 ${card.color === 'sage' ? 'bg-brand-dark-green/10 text-brand-dark-green' :
-                    card.color === 'terracotta' ? 'bg-brand-orange/10 text-brand-orange' :
-                      'bg-brand-brown/10 text-brand-brown'
+                  card.color === 'terracotta' ? 'bg-brand-orange/10 text-brand-orange' :
+                    'bg-brand-brown/10 text-brand-brown'
                   }`}>
                   <card.icon className="h-6 w-6" />
                 </div>
